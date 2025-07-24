@@ -1,4 +1,18 @@
 
+const express = require('express');
+const app = express();
+const http = require('http');
+const server = http.createServer(app);
+const WebSocket = require('ws');
+const wss = new WebSocket.Server({ server });
+
+// Serve i file statici
+app.use(express.static('public'));
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`WebSocket server in ascolto sulla porta ${PORT}`);
+});
 const WebSocket = require("ws");
 const http = require("http");
 
