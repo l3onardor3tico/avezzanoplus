@@ -41,6 +41,7 @@ function broadcastOnline() {
   broadcast({ type: "online", count: clients.size });
 }
 
-server.listen(3001, () => {
-  console.log("WebSocket server in ascolto sulla porta 3001");
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`WebSocket server in ascolto sulla porta ${PORT}`);
 });
