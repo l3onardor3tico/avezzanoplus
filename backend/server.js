@@ -14,7 +14,6 @@ server.listen(PORT, () => {
   console.log(`WebSocket server in ascolto sulla porta ${PORT}`);
 });
 
-const server = http.createServer();
 const wss = new WebSocket.Server({ server });
 
 let clients = new Set();
