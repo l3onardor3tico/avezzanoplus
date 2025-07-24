@@ -51,5 +51,3 @@ function broadcastOnline() {
   broadcast({ type: "online", count: clients.size });
 }
 
-  console.log(`WebSocket server in ascolto sulla porta ${PORT}`);
-);
