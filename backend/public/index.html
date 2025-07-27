@@ -17,37 +17,51 @@
   <header>Avezzano Plus – Chat Pubblica</header>
   <div id="users-online">Utenti online: <span id="online-count">0</span></div>
   <div id="chat"></div>
-  <input id="msg" placeholder="Scrivi il tuo messaggio" maxlength="240"/>
-  <button id="sendButton">Invia</button>
+  <input id="msg" placeholder="Scrivi il tuo messaggio" maxlength="240" />
+  <button onclick="sendMessage()">Invia</button>
 
   <script>
-    window.onload = function () {
-      const socket = new WebSocket("wss://" + window.location.hostname);
-      const chat = document.getElementById("chat");
-      const input = document.getElementById("msg");
-      const button = document.getElementById("sendButton");
-      const online = document.getElementById("online-count");
+    // === Username setup ===
+    let username = localStorage.getItem("username");
 
-      socket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === "chat") {
-          const p = document.createElement("p");
-          p.textContent = data.user + ": " + data.message;
-          chat.appendChild(p);
-          chat.scrollTop = chat.scrollHeight;
-        } else if (data.type === "online") {
-          online.textContent = data.count;
-        }
-      };
+    while (!username || !/^[A-ZÀ-ÿ][a-zà-ÿ]+ [A-ZÀ-ÿ][a-zà-ÿ]+$/.test(username)) {
+      username = prompt("Inserisci nome e cognome reali (es: Mario Rossi):");
+      if (!username) continue;
+      username = username.trim().replace(/\s+/g, " ");
+      if (/^[A-ZÀ-ÿ][a-zà-ÿ]+ [A-ZÀ-ÿ][a-zà-ÿ]+$/.test(username)) {
+        localStorage.setItem("username", username);
+        break;
+      } else {
+        alert("Inserisci un nome e cognome validi (solo lettere, no numeri o caratteri speciali).");
+      }
+    }
 
-      button.onclick = function () {
-        if (input.value.trim() !== "") {
-          socket.send(JSON.stringify({ type: "chat", message: input.value }));
-          input.value = "";
-        }
-      };
+    const socket = new WebSocket("wss://" + window.location.host); // wss = WebSocket sicuro
+    const chat = document.getElementById("chat");
+    const input = document.getElementById("msg");
+    const online = document.getElementById("online-count");
+
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === "chat") {
+        const p = document.createElement("p");
+        p.textContent = data.user + ": " + data.message;
+        chat.appendChild(p);
+        chat.scrollTop = chat.scrollHeight;
+      } else if (data.type === "online") {
+        online.textContent = data.count;
+      }
     };
+
+    function sendMessage() {
+      if (input.value.trim() !== "") {
+        socket.send(JSON.stringify({ type: "chat", user: username, message: input.value }));
+        input.value = "";
+      }
+    }
   </script>
 </body>
 </html>
+
+
 
