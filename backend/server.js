@@ -6,6 +6,7 @@ const server = http.createServer(app);
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ server });
 
+// Serve i file statici
 app.use(express.static('public'));
 
 const PORT = process.env.PORT || 10000;
@@ -27,9 +28,18 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    if (data.type === "chat" && typeof data.message === "string") {
-      const user = typeof data.user === "string" ? data.user : "Utente";
-      broadcast({ type: "chat", user, message: data.message });
+    if (data.type === "chat") {
+      // Verifica che user e profilePic siano presenti
+      const user = data.user || "Utente";
+      const profilePic = data.profilePic || null;
+      const msg = data.message || "";
+
+      broadcast({
+        type: "chat",
+        user: user,
+        profilePic: profilePic,
+        message: msg
+      });
     }
   });
 
@@ -50,5 +60,3 @@ function broadcast(msg) {
 function broadcastOnline() {
   broadcast({ type: "online", count: clients.size });
 }
-
-
