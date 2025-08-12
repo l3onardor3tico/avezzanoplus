@@ -9,7 +9,7 @@ const wss = new WebSocket.Server({ server });
 // Serve i file statici
 app.use(express.static('public'));
 
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`WebSocket server in ascolto sulla porta ${PORT}`);
 });
@@ -29,16 +29,11 @@ wss.on("connection", (ws) => {
     }
 
     if (data.type === "chat") {
-      // Verifica che user e profilePic siano presenti
-      const user = data.user || "Utente";
-      const profilePic = data.profilePic || null;
-      const msg = data.message || "";
-
-      broadcast({
-        type: "chat",
-        user: user,
-        profilePic: profilePic,
-        message: msg
+      broadcast({ 
+        type: "chat", 
+        user: data.user || "Utente", 
+        profilePic: data.profilePic || "",
+        message: data.message 
       });
     }
   });
