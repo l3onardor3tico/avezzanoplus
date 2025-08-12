@@ -1,133 +1,112 @@
-
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <title>Avezzano Plus – Chat Pubblica</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #f9f9f9;
-        }
-
-        header {
-            background-color: #007bff;
-            color: white;
-            padding: 10px;
-            text-align: center;
-            font-size: 18px;
-            font-weight: bold;
-        }
-
-        #online-users-btn {
-            padding: 10px;
-            background-color: white;
-            border-bottom: 1px solid #ddd;
-            cursor: pointer;
-            font-size: 14px;
-        }
-
-        #online-users-list {
-            display: none;
-            background-color: #fff;
-            border-bottom: 1px solid #ddd;
-            padding: 10px;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        #chat-box {
-            padding: 10px;
-            height: 400px;
-            overflow-y: auto;
-            background-color: white;
-            border-bottom: 1px solid #ccc;
-        }
-
-        #message-input {
-            display: flex;
-            padding: 10px;
-            background-color: #f1f1f1;
-        }
-
-        #message {
-            flex: 1;
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-
-        button {
-            padding: 8px 12px;
-            margin-left: 5px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        button:hover {
-            background-color: #0056b3;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Avezzano Plus</title>
+  <style>
+    body { font-family: sans-serif; background: #f9f9f9; margin: 0; padding: 0; }
+    header { background: #007bff; color: white; padding: 1rem; text-align: center; }
+    #chat { height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 1rem; background: white; margin: 1rem; }
+    #users-online { font-size: 0.9rem; color: #555; margin: 1rem; }
+    input, button { padding: 0.5rem; margin: 0.5rem; }
+    #register { margin: 1rem; }
+    .msg { display: flex; align-items: center; margin-bottom: 5px; }
+    .msg img { width: 32px; height: 32px; border-radius: 50%; margin-right: 8px; }
+  </style>
 </head>
 <body>
+  <header>Avezzano Plus – Chat Pubblica</header>
 
-<header>
-    Avezzano Plus – Chat Pubblica
-</header>
+  <div id="register">
+    <h3>Registrazione</h3>
+    <input id="name" placeholder="Nome e Cognome" maxlength="50">
+    <input type="file" id="photo" accept="image/*">
+    <button onclick="registerUser()">Entra in chat</button>
+  </div>
 
-<div id="online-users-btn">Utenti online: <span id="online-count">0</span></div>
-<div id="online-users-list"></div>
+  <div id="chat-section" style="display:none;">
+    <div id="users-online">Utenti online: <span id="online-count">0</span></div>
+    <div id="chat"></div>
+    <input id="msg" placeholder="Scrivi il tuo messaggio" maxlength="240">
+    <button onclick="sendMessage()">Invia</button>
+  </div>
 
-<div id="chat-box"></div>
+  <script>
+    let socket;
+    let userData = JSON.parse(localStorage.getItem("userData"));
 
-<div id="message-input">
-    <input type="text" id="message" placeholder="Scrivi il tuo messaggio...">
-    <button id="send-btn">Invia</button>
-</div>
+    // Se i dati sono già salvati, entra subito in chat
+    if (userData && userData.name && userData.profilePic) {
+      startChat();
+    }
 
-<script src="/socket.io/socket.io.js"></script>
-<script>
-    const socket = io();
-    const chatBox = document.getElementById('chat-box');
-    const messageInput = document.getElementById('message');
-    const sendBtn = document.getElementById('send-btn');
-    const onlineCount = document.getElementById('online-count');
-    const onlineUsersBtn = document.getElementById('online-users-btn');
-    const onlineUsersList = document.getElementById('online-users-list');
+    function registerUser() {
+      const name = document.getElementById("name").value.trim();
+      const photoFile = document.getElementById("photo").files[0];
 
-    let username = localStorage.getItem('username') || prompt("Inserisci il tuo username:");
-    localStorage.setItem('username', username);
+      // Controllo nome e cognome (ammette spazi ma non numeri o simboli)
+      if (!/^[A-Za-zÀ-ÿ\s]+$/.test(name) || name.split(" ").length < 2) {
+        alert("Inserisci nome e cognome validi (senza numeri o simboli).");
+        return;
+      }
 
-    socket.emit('setUsername', username);
+      if (!photoFile) {
+        alert("Carica una foto profilo.");
+        return;
+      }
 
-    sendBtn.addEventListener('click', () => {
-        if (messageInput.value.trim() !== "") {
-            socket.emit('chatMessage', messageInput.value);
-            messageInput.value = '';
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const profilePic = e.target.result;
+
+        userData = { name, profilePic };
+        localStorage.setItem("userData", JSON.stringify(userData));
+        startChat();
+      };
+      reader.readAsDataURL(photoFile);
+    }
+
+    function startChat() {
+      document.getElementById("register").style.display = "none";
+      document.getElementById("chat-section").style.display = "block";
+
+      socket = new WebSocket("wss://" + window.location.host);
+
+      socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === "chat") {
+          const div = document.createElement("div");
+          div.classList.add("msg");
+
+          const img = document.createElement("img");
+          img.src = data.profilePic || "default.png";
+
+          const text = document.createElement("span");
+          text.textContent = data.user + ": " + data.message;
+
+          div.appendChild(img);
+          div.appendChild(text);
+          document.getElementById("chat").appendChild(div);
+          document.getElementById("chat").scrollTop = document.getElementById("chat").scrollHeight;
+        } else if (data.type === "online") {
+          document.getElementById("online-count").textContent = data.count;
         }
-    });
+      };
+    }
 
-    socket.on('chatMessage', (data) => {
-        const msgElement = document.createElement('div');
-        msgElement.innerHTML = `<b>${data.username}:</b> ${data.message}`;
-        chatBox.appendChild(msgElement);
-        chatBox.scrollTop = chatBox.scrollHeight;
-    });
-
-    socket.on('updateUsers', (users) => {
-        onlineCount.textContent = users.length;
-        onlineUsersList.innerHTML = users.map(u => `<div>${u}</div>`).join('');
-    });
-
-    onlineUsersBtn.addEventListener('click', () => {
-        onlineUsersList.style.display = (onlineUsersList.style.display === "none") ? "block" : "none";
-    });
-</script>
-
+    function sendMessage() {
+      const input = document.getElementById("msg");
+      if (input.value.trim() !== "") {
+        socket.send(JSON.stringify({ 
+          type: "chat", 
+          user: userData.name, 
+          profilePic: userData.profilePic,
+          message: input.value 
+        }));
+        input.value = "";
+      }
+    }
+  </script>
 </body>
 </html>
