@@ -2,95 +2,94 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Avezzano Plus</title>
   <style>
     body { font-family: sans-serif; background: #f9f9f9; margin: 0; padding: 0; }
     header { background: #007bff; color: white; padding: 1rem; text-align: center; }
-    #chat { height: 400px; overflow-y: scroll; border: 1px solid #ccc; padding: 1rem; background: white; }
+    #chat { height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 1rem; background: white; margin: 1rem; }
     #users-online { font-size: 0.9rem; color: #555; margin: 1rem; }
     input, button { padding: 0.5rem; margin: 0.5rem; }
-    #user-section { margin: 1rem; }
-    .msg { display: flex; align-items: center; margin-bottom: 0.5rem; }
-    .msg img { width: 32px; height: 32px; border-radius: 50%; margin-right: 8px; object-fit: cover; }
+    #register { margin: 1rem; }
+    .msg { display: flex; align-items: center; margin-bottom: 5px; }
+    .msg img { width: 32px; height: 32px; border-radius: 50%; margin-right: 8px; }
   </style>
 </head>
 <body>
   <header>Avezzano Plus – Chat Pubblica</header>
 
-  <div id="user-section">
-    <input id="username" placeholder="Nome e Cognome" maxlength="50"/>
-    <input type="file" id="profile-pic" accept="image/*" />
-    <button onclick="registerUser()">Entra nella chat</button>
+  <div id="register">
+    <h3>Registrazione</h3>
+    <input id="name" placeholder="Nome e Cognome" maxlength="50">
+    <input type="file" id="photo" accept="image/*">
+    <button onclick="registerUser()">Entra in chat</button>
   </div>
 
-  <div id="users-online">Utenti online: <span id="online-count">0</span></div>
-  <div id="chat"></div>
-
-  <input id="msg" placeholder="Scrivi il tuo messaggio" maxlength="240" disabled />
-  <button onclick="sendMessage()" id="sendBtn" disabled>Invia</button>
+  <div id="chat-section" style="display:none;">
+    <div id="users-online">Utenti online: <span id="online-count">0</span></div>
+    <div id="chat"></div>
+    <input id="msg" placeholder="Scrivi il tuo messaggio" maxlength="240">
+    <button onclick="sendMessage()">Invia</button>
+  </div>
 
   <script>
     let socket;
-    let username = "";
-    let profilePicData = "";
+    let userData = JSON.parse(localStorage.getItem("userData"));
 
-    function validateName(name) {
-      const regex = /^[A-ZÀ-ÿ][a-zà-ÿ]+( [A-ZÀ-ÿ][a-zà-ÿ]+)?$/;
-      return regex.test(name.trim());
+    // Se i dati sono già salvati, entra subito in chat
+    if (userData && userData.name && userData.profilePic) {
+      startChat();
     }
 
     function registerUser() {
-      const nameInput = document.getElementById("username").value.trim();
+      const name = document.getElementById("name").value.trim();
+      const photoFile = document.getElementById("photo").files[0];
 
-      if (!validateName(nameInput)) {
-        alert("Inserisci nome e cognome validi (senza numeri o simboli)");
+      // Controllo nome e cognome (ammette spazi ma non numeri o simboli)
+      if (!/^[A-Za-zÀ-ÿ\s]+$/.test(name) || name.split(" ").length < 2) {
+        alert("Inserisci nome e cognome validi (senza numeri o simboli).");
         return;
       }
 
-      username = nameInput;
-
-      const file = document.getElementById("profile-pic").files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function (e) {
-          profilePicData = e.target.result;
-          connectWebSocket();
-        };
-        reader.readAsDataURL(file);
-      } else {
-        connectWebSocket();
+      if (!photoFile) {
+        alert("Carica una foto profilo.");
+        return;
       }
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const profilePic = e.target.result;
+
+        userData = { name, profilePic };
+        localStorage.setItem("userData", JSON.stringify(userData));
+        startChat();
+      };
+      reader.readAsDataURL(photoFile);
     }
 
-    function connectWebSocket() {
-      document.getElementById("username").disabled = true;
-      document.getElementById("profile-pic").disabled = true;
-      document.getElementById("sendBtn").disabled = false;
-      document.getElementById("msg").disabled = false;
+    function startChat() {
+      document.getElementById("register").style.display = "none";
+      document.getElementById("chat-section").style.display = "block";
 
-      socket = new WebSocket("wss://" + window.location.hostname);
+      socket = new WebSocket("wss://" + window.location.host);
 
       socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
-
         if (data.type === "chat") {
-          const p = document.createElement("div");
-          p.className = "msg";
+          const div = document.createElement("div");
+          div.classList.add("msg");
 
-          if (data.profilePic) {
-            const img = document.createElement("img");
-            img.src = data.profilePic;
-            p.appendChild(img);
-          }
+          const img = document.createElement("img");
+          img.src = data.profilePic || "default.png";
 
-          const span = document.createElement("span");
-          span.textContent = data.user + ": " + data.message;
-          p.appendChild(span);
+          const text = document.createElement("span");
+          text.textContent = data.user + ": " + data.message;
 
-          document.getElementById("chat").appendChild(p);
-          chat.scrollTop = chat.scrollHeight;
+          div.appendChild(img);
+          div.appendChild(text);
+          document.getElementById("chat").appendChild(div);
+          document.getElementById("chat").scrollTop = document.getElementById("chat").scrollHeight;
         } else if (data.type === "online") {
           document.getElementById("online-count").textContent = data.count;
         }
@@ -99,13 +98,12 @@
 
     function sendMessage() {
       const input = document.getElementById("msg");
-      const message = input.value.trim();
-      if (message && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({
-          type: "chat",
-          user: username,
-          message: message,
-          profilePic: profilePicData
+      if (input.value.trim() !== "") {
+        socket.send(JSON.stringify({ 
+          type: "chat", 
+          user: userData.name, 
+          profilePic: userData.profilePic,
+          message: input.value 
         }));
         input.value = "";
       }
@@ -113,6 +111,7 @@
   </script>
 </body>
 </html>
+
 
 
 
