@@ -16,8 +16,8 @@ server.listen(PORT, () => {
 let clients = new Set();
 
 wss.on("connection", (ws) => {
-  ws.userData = { user: null, profilePic: null };
   clients.add(ws);
+  broadcastOnline();
 
   ws.on("message", (message) => {
     let data = {};
@@ -27,14 +27,13 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    if (data.type === "login") {
-      ws.userData.user = data.user;
-      ws.userData.profilePic = data.profilePic;
-      broadcastOnline();
-    }
-
     if (data.type === "chat") {
-      broadcast({ type: "chat", user: ws.userData.user || "Utente", message: data.message });
+      broadcast({ 
+        type: "chat", 
+        user: data.user || "Utente", 
+        profilePic: data.profilePic || "",
+        message: data.message 
+      });
     }
   });
 
@@ -53,9 +52,5 @@ function broadcast(msg) {
 }
 
 function broadcastOnline() {
-  const onlineUsers = Array.from(clients)
-    .filter(c => c.userData.user)
-    .map(c => ({ user: c.userData.user, profilePic: c.userData.profilePic }));
-
-  broadcast({ type: "online", count: onlineUsers.length, users: onlineUsers });
+  broadcast({ type: "online", count: clients.size });
 }
