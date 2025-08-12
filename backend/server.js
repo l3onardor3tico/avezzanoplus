@@ -1,4 +1,3 @@
-
 const express = require('express');
 const app = express();
 const http = require('http');
@@ -6,6 +5,7 @@ const server = http.createServer(app);
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ server });
 
+// Serve i file statici
 app.use(express.static('public'));
 
 const PORT = process.env.PORT || 3000;
@@ -16,9 +16,8 @@ server.listen(PORT, () => {
 let clients = new Set();
 
 wss.on("connection", (ws) => {
-  ws.userData = { username: "Utente", profilePic: "" }; // default
+  ws.userData = { user: null, profilePic: null };
   clients.add(ws);
-  broadcastOnline();
 
   ws.on("message", (message) => {
     let data = {};
@@ -28,19 +27,14 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    if (data.type === "register") {
-      ws.userData.username = data.username;
+    if (data.type === "login") {
+      ws.userData.user = data.user;
       ws.userData.profilePic = data.profilePic;
       broadcastOnline();
     }
 
     if (data.type === "chat") {
-      broadcast({
-        type: "chat",
-        user: ws.userData.username,
-        profilePic: ws.userData.profilePic,
-        message: data.message
-      });
+      broadcast({ type: "chat", user: ws.userData.user || "Utente", message: data.message });
     }
   });
 
@@ -59,9 +53,9 @@ function broadcast(msg) {
 }
 
 function broadcastOnline() {
-  const onlineUsers = [...clients].map(c => ({
-    username: c.userData.username,
-    profilePic: c.userData.profilePic
-  }));
-  broadcast({ type: "online", count: clients.size, users: onlineUsers });
+  const onlineUsers = Array.from(clients)
+    .filter(c => c.userData.user)
+    .map(c => ({ user: c.userData.user, profilePic: c.userData.profilePic }));
+
+  broadcast({ type: "online", count: onlineUsers.length, users: onlineUsers });
 }
