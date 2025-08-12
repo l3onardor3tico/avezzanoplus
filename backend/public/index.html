@@ -1,38 +1,140 @@
 
-<div id="users-online" style="cursor:pointer; color:blue; text-decoration:underline;">
-  Utenti online: <span id="online-count">0</span>
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>Avezzano Plus</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; }
+  #loginSection, #chatSection { max-width: 600px; margin: auto; }
+  #chat { border: 1px solid #ccc; height: 300px; overflow-y: auto; padding: 5px; margin-top: 10px; }
+  #message { width: 80%; }
+  #userListModal {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); justify-content: center; align-items: center;
+  }
+  #userListContent {
+    background: white; padding: 20px; border-radius: 8px; width: 300px; max-height: 400px; overflow-y: auto;
+  }
+  .user-item { display: flex; align-items: center; margin-bottom: 8px; }
+  .user-item img { width: 32px; height: 32px; border-radius: 50%; margin-right: 8px; }
+</style>
+</head>
+<body>
+
+<div id="loginSection">
+  <h2>Benvenuto su Avezzano Plus</h2>
+  <p>Inserisci il tuo nome e cognome (puoi avere un secondo nome) e scegli una foto profilo.</p>
+  <input type="text" id="usernameInput" placeholder="Nome e Cognome"><br><br>
+  <input type="file" id="profilePicInput" accept="image/*"><br><br>
+  <button id="loginBtn">Entra</button>
 </div>
-<div id="online-list" style="display:none; background:#fff; border:1px solid #ccc; padding:10px; max-width:300px;">
-  <h4>Lista utenti online</h4>
-  <ul id="user-list"></ul>
+
+<div id="chatSection" style="display:none;">
+  <a href="#" id="onlineUsersBtn">Utenti online: <span id="onlineCount">0</span></a>
+  <div id="chat"></div>
+  <input type="text" id="message" placeholder="Scrivi un messaggio...">
+  <button id="sendBtn">Invia</button>
+</div>
+
+<div id="userListModal">
+  <div id="userListContent">
+    <h3>Utenti Online</h3>
+    <div id="userList"></div>
+    <button id="closeUserList">Chiudi</button>
+  </div>
 </div>
 
 <script>
-let onlineUsers = [];
+let ws;
+let username;
+let profilePic;
 
-socket.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  if (data.type === "chat") {
-    const p = document.createElement("p");
-    p.innerHTML = `<img src="${data.profilePic}" style="width:24px;height:24px;border-radius:50%;"> <b>${data.user}</b>: ${data.message}`;
-    chat.appendChild(p);
-    chat.scrollTop = chat.scrollHeight;
-  } else if (data.type === "online") {
-    online.textContent = data.count;
-    onlineUsers = data.users || [];
+document.addEventListener("DOMContentLoaded", () => {
+  // Recupera dati da localStorage
+  const savedName = localStorage.getItem("username");
+  const savedPic = localStorage.getItem("profilePic");
+  if (savedName && savedPic) {
+    username = savedName;
+    profilePic = savedPic;
+    startChat();
   }
-};
 
-document.getElementById("users-online").onclick = () => {
-  const listDiv = document.getElementById("online-list");
-  const listEl = document.getElementById("user-list");
-  listEl.innerHTML = "";
-  onlineUsers.forEach(u => {
-    const li = document.createElement("li");
-    li.innerHTML = `<img src="${u.profilePic}" style="width:24px;height:24px;border-radius:50%;"> ${u.username}`;
-    listEl.appendChild(li);
+  document.getElementById("loginBtn").addEventListener("click", () => {
+    const nameValue = document.getElementById("usernameInput").value.trim();
+    const nameRegex = /^[A-Za-zÀ-ÖØ-öø-ÿ]+(?: [A-Za-zÀ-ÖØ-öø-ÿ]+)+$/;
+    if (!nameRegex.test(nameValue)) {
+      alert("Inserisci nome e cognome validi (puoi includere secondo nome).");
+      return;
+    }
+    const file = document.getElementById("profilePicInput").files[0];
+    if (!file) {
+      alert("Seleziona una foto profilo.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      profilePic = e.target.result;
+      username = nameValue;
+      localStorage.setItem("username", username);
+      localStorage.setItem("profilePic", profilePic);
+      startChat();
+    };
+    reader.readAsDataURL(file);
   });
-  listDiv.style.display = listDiv.style.display === "none" ? "block" : "none";
-};
+
+  document.getElementById("sendBtn").addEventListener("click", sendMessage);
+  document.getElementById("onlineUsersBtn").addEventListener("click", (e) => {
+    e.preventDefault();
+    document.getElementById("userListModal").style.display = "flex";
+  });
+  document.getElementById("closeUserList").addEventListener("click", () => {
+    document.getElementById("userListModal").style.display = "none";
+  });
+});
+
+function startChat() {
+  document.getElementById("loginSection").style.display = "none";
+  document.getElementById("chatSection").style.display = "block";
+
+  ws = new WebSocket(`wss://${window.location.host}`);
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: "login", user: username, profilePic: profilePic }));
+  };
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === "chat") {
+      const chat = document.getElementById("chat");
+      chat.innerHTML += `<p><strong>${data.user}</strong>: ${data.message}</p>`;
+      chat.scrollTop = chat.scrollHeight;
+    } else if (data.type === "online") {
+      document.getElementById("onlineCount").textContent = data.count;
+      if (data.users) {
+        updateUserList(data.users);
+      }
+    }
+  };
+}
+
+function sendMessage() {
+  const msg = document.getElementById("message").value.trim();
+  if (msg) {
+    ws.send(JSON.stringify({ type: "chat", message: msg }));
+    document.getElementById("message").value = "";
+  }
+}
+
+function updateUserList(users) {
+  const listDiv = document.getElementById("userList");
+  listDiv.innerHTML = "";
+  users.forEach(u => {
+    const item = document.createElement("div");
+    item.className = "user-item";
+    item.innerHTML = `<img src="${u.profilePic}" alt="Foto"> <span>${u.user}</span>`;
+    listDiv.appendChild(item);
+  });
+}
 </script>
 
+</body>
+</html>
