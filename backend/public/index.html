@@ -8,13 +8,13 @@
     body { font-family: sans-serif; background: #f9f9f9; margin: 0; padding: 0; }
     header { background: #007bff; color: white; padding: 1rem; text-align: center; }
     #chat { height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 1rem; background: white; margin: 1rem; }
-    #users-online { font-size: 0.9rem; color: #007bff; margin: 1rem; cursor: pointer; }
+    #users-online { font-size: 0.9rem; color: #555; margin: 1rem; cursor: pointer; }
     input, button { padding: 0.5rem; margin: 0.5rem; }
     #register { margin: 1rem; }
     .msg { display: flex; align-items: center; margin-bottom: 5px; }
     .msg img { width: 32px; height: 32px; border-radius: 50%; margin-right: 8px; }
-    #online-list { display: none; margin: 1rem; padding: 0.5rem; border: 1px solid #ccc; background: white; }
-    .user { display: flex; align-items: center; margin-bottom: 5px; }
+    #online-list { display: none; border: 1px solid #ccc; margin: 1rem; padding: 0.5rem; background: #fff; }
+    .user { display: flex; align-items: center; margin: 5px 0; }
     .user img { width: 24px; height: 24px; border-radius: 50%; margin-right: 6px; }
   </style>
 </head>
@@ -29,7 +29,9 @@
   </div>
 
   <div id="chat-section" style="display:none;">
-    <div id="users-online">Utenti online: <span id="online-count">0</span></div>
+    <div id="users-online" onclick="toggleUserList()">
+      Utenti online: <span id="online-count">0</span>
+    </div>
     <div id="online-list"></div>
     <div id="chat"></div>
     <input id="msg" placeholder="Scrivi il tuo messaggio" maxlength="240">
@@ -74,10 +76,6 @@
 
       socket = new WebSocket("wss://" + window.location.host);
 
-      socket.onopen = () => {
-        socket.send(JSON.stringify({ type: "register", user: userData.name, profilePic: userData.profilePic }));
-      };
-
       socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.type === "chat") {
@@ -96,29 +94,33 @@
           document.getElementById("chat").scrollTop = document.getElementById("chat").scrollHeight;
         } else if (data.type === "online") {
           document.getElementById("online-count").textContent = data.count;
-          updateOnlineList(data.users);
+          updateOnlineList(data.users || []);
         }
+      };
+
+      socket.onopen = () => {
+        socket.send(JSON.stringify({ type: "join", ...userData }));
       };
     }
 
     function sendMessage() {
       const input = document.getElementById("msg");
       if (input.value.trim() !== "") {
-        socket.send(JSON.stringify({ 
-          type: "chat", 
-          user: userData.name, 
+        socket.send(JSON.stringify({
+          type: "chat",
+          user: userData.name,
           profilePic: userData.profilePic,
-          message: input.value 
+          message: input.value
         }));
         input.value = "";
       }
     }
 
-    // Mostra/nascondi lista utenti online
-    document.getElementById("users-online").onclick = () => {
+    // Mostra/nasconde lista utenti
+    function toggleUserList() {
       const list = document.getElementById("online-list");
-      list.style.display = (list.style.display === "none") ? "block" : "none";
-    };
+      list.style.display = list.style.display === "none" ? "block" : "none";
+    }
 
     // Aggiorna lista utenti online
     function updateOnlineList(users) {
@@ -132,7 +134,7 @@
         img.src = u.profilePic || "default.png";
 
         const span = document.createElement("span");
-        span.textContent = u.name;
+        span.textContent = u.name || "Senza nome";
 
         div.appendChild(img);
         div.appendChild(span);
@@ -142,3 +144,4 @@
   </script>
 </body>
 </html>
+
