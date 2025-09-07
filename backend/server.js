@@ -5,7 +5,6 @@ const server = http.createServer(app);
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ server });
 
-// Serve i file statici
 app.use(express.static('public'));
 
 const PORT = process.env.PORT || 3000;
@@ -13,10 +12,11 @@ server.listen(PORT, () => {
   console.log(`WebSocket server in ascolto sulla porta ${PORT}`);
 });
 
-let clients = new Set();
+// Ogni client ha un oggetto con ws, name e profilePic
+let clients = new Map();
 
 wss.on("connection", (ws) => {
-  clients.add(ws);
+  clients.set(ws, { name: null, profilePic: null });
   broadcastOnline();
 
   ws.on("message", (message) => {
@@ -27,12 +27,21 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    if (data.type === "register") {
+      // Salva i dati dell'utente
+      clients.set(ws, { name: data.name, profilePic: data.profilePic });
+      broadcastOnline();
+    }
+
     if (data.type === "chat") {
-      broadcast({ 
-        type: "chat", 
-        user: data.user || "Utente", 
-        profilePic: data.profilePic || "",
-        message: data.message 
+      const user = clients.get(ws);
+      if (!user || !user.name) return;
+
+      broadcast({
+        type: "chat",
+        user: user.name,
+        profilePic: user.profilePic,
+        message: data.message
       });
     }
   });
@@ -44,7 +53,7 @@ wss.on("connection", (ws) => {
 });
 
 function broadcast(msg) {
-  for (let client of clients) {
+  for (let client of clients.keys()) {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(msg));
     }
@@ -52,5 +61,14 @@ function broadcast(msg) {
 }
 
 function broadcastOnline() {
-  broadcast({ type: "online", count: clients.size });
+  const onlineUsers = Array.from(clients.values())
+    .filter(u => u.name !== null)
+    .map(u => ({ name: u.name, profilePic: u.profilePic }));
+
+  broadcast({
+    type: "online",
+    count: onlineUsers.length,
+    users: onlineUsers
+  });
 }
+
