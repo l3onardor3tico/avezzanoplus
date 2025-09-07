@@ -1,4 +1,3 @@
-
 const express = require('express');
 const app = express();
 const http = require('http');
@@ -6,6 +5,7 @@ const server = http.createServer(app);
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ server });
 
+// Serve i file statici
 app.use(express.static('public'));
 
 const PORT = process.env.PORT || 3000;
@@ -13,12 +13,10 @@ server.listen(PORT, () => {
   console.log(`WebSocket server in ascolto sulla porta ${PORT}`);
 });
 
-// Ogni client ha un oggetto con ws, name e profilePic
-let clients = new Map();
+let clients = new Map(); // ws -> { name, profilePic }
 
 wss.on("connection", (ws) => {
-  clients.set(ws, { name: null, profilePic: null });
-  broadcastOnline();
+  console.log("Nuovo utente connesso");
 
   ws.on("message", (message) => {
     let data = {};
@@ -28,20 +26,18 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    if (data.type === "register") {
-      // Salva i dati dell'utente
+    if (data.type === "join") {
+      // Salva le info utente
       clients.set(ws, { name: data.name, profilePic: data.profilePic });
       broadcastOnline();
     }
 
     if (data.type === "chat") {
-      const user = clients.get(ws);
-      if (!user || !user.name) return;
-
+      const userInfo = clients.get(ws) || { name: "Utente", profilePic: "" };
       broadcast({
         type: "chat",
-        user: user.name,
-        profilePic: user.profilePic,
+        user: userInfo.name,
+        profilePic: userInfo.profilePic,
         message: data.message
       });
     }
@@ -53,23 +49,18 @@ wss.on("connection", (ws) => {
   });
 });
 
+// Invia un messaggio a tutti
 function broadcast(msg) {
-  for (let client of clients.keys()) {
+  for (let client of wss.clients) {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(msg));
     }
   }
 }
 
+// Aggiorna lista utenti online
 function broadcastOnline() {
-  const onlineUsers = Array.from(clients.values())
-    .filter(u => u.name !== null)
-    .map(u => ({ name: u.name, profilePic: u.profilePic }));
-
-  broadcast({
-    type: "online",
-    count: onlineUsers.length,
-    users: onlineUsers
-  });
+  const users = Array.from(clients.values());
+  broadcast({ type: "online", count: users.length, users });
 }
 
