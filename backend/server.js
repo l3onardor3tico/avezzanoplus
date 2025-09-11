@@ -5,7 +5,6 @@ const server = http.createServer(app);
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ server });
 
-// Serve i file statici
 app.use(express.static('public'));
 
 const PORT = process.env.PORT || 3000;
@@ -13,54 +12,58 @@ server.listen(PORT, () => {
   console.log(`WebSocket server in ascolto sulla porta ${PORT}`);
 });
 
-let clients = new Map(); // ws -> { name, profilePic }
+const clients = new Map(); // ws => { name, profilePic }
 
-wss.on("connection", (ws) => {
-  console.log("Nuovo utente connesso");
-
-  ws.on("message", (message) => {
-    let data = {};
-    try {
-      data = JSON.parse(message);
-    } catch (e) {
-      return;
-    }
-
-    if (data.type === "join") {
-      // Salva le info utente
-      clients.set(ws, { name: data.name, profilePic: data.profilePic });
-      broadcastOnline();
-    }
-
-    if (data.type === "chat") {
-      const userInfo = clients.get(ws) || { name: "Utente", profilePic: "" };
-      broadcast({
-        type: "chat",
-        user: userInfo.name,
-        profilePic: userInfo.profilePic,
-        message: data.message
-      });
-    }
-  });
-
-  ws.on("close", () => {
-    clients.delete(ws);
-    broadcastOnline();
-  });
-});
-
-// Invia un messaggio a tutti
+/* Broadcast helper */
 function broadcast(msg) {
-  for (let client of wss.clients) {
+  const json = JSON.stringify(msg);
+  for (const client of wss.clients) {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(msg));
+      client.send(json);
     }
   }
 }
 
-// Aggiorna lista utenti online
+/* Invia lista utenti online (solo quelli registrati) */
 function broadcastOnline() {
-  const users = Array.from(clients.values());
-  broadcast({ type: "online", count: users.length, users });
+  const users = Array.from(clients.values()).map(u => ({ name: u.name, profilePic: u.profilePic }));
+  broadcast({ type: 'online', count: users.length, users });
 }
+
+wss.on('connection', (ws, req) => {
+  console.log('Nuovo client connesso');
+  // inizializza con dati null; verranno popolati da 'join' o 'register'
+  clients.set(ws, { name: null, profilePic: null });
+
+  ws.on('message', (msg) => {
+    let data;
+    try { data = JSON.parse(msg); } catch(e) { return; }
+
+    // accetta sia 'join' che 'register' per compatibilità
+    if (data.type === 'join' || data.type === 'register') {
+      clients.set(ws, { name: data.name || data.user || 'Utente', profilePic: data.profilePic || '' });
+      console.log('Registrato utente:', clients.get(ws).name);
+      broadcastOnline();
+      return;
+    }
+
+    if (data.type === 'chat') {
+      const info = clients.get(ws) || { name: 'Utente', profilePic: '' };
+      const outgoing = {
+        type: 'chat',
+        user: info.name,
+        profilePic: info.profilePic,
+        message: data.message || ''
+      };
+      broadcast(outgoing);
+      return;
+    }
+  });
+
+  ws.on('close', () => {
+    clients.delete(ws);
+    broadcastOnline();
+    console.log('Client disconnesso, utenti online:', clients.size);
+  });
+});
 
