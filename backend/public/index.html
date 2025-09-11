@@ -1,18 +1,21 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Avezzano Plus</title>
   <style>
-    body { font-family: sans-serif; background: #f9f9f9; margin: 0; padding: 0; }
-    header { background: #007bff; color: white; padding: 1rem; text-align: center; }
-    #chat { height: 400px; overflow-y: auto; border: 1px solid #ccc; padding: 1rem; background: white; margin: 1rem; }
-    #users-online { font-size: 0.9rem; color: #555; margin: 1rem; }
-    input, button { padding: 0.5rem; margin: 0.5rem; }
-    #register { margin: 1rem; }
-    .msg { display: flex; align-items: center; margin-bottom: 5px; }
-    .msg img { width: 32px; height: 32px; border-radius: 50%; margin-right: 8px; }
+    body { font-family: sans-serif; background: #f9f9f9; margin:0; padding:0; }
+    header { background:#007bff; color:#fff; padding:1rem; text-align:center; }
+    #chat { height: 400px; overflow-y:auto; border:1px solid #ccc; padding:1rem; background:#fff; margin:1rem; }
+    #users-online { font-size:0.95rem; color:#007bff; margin:1rem; cursor:pointer; }
+    input, button { padding:0.5rem; margin:0.25rem; }
+    #register { margin:1rem; }
+    .msg { display:flex; align-items:center; margin-bottom:6px; }
+    .msg img { width:32px; height:32px; border-radius:50%; margin-right:8px; object-fit:cover; }
+    #online-list { display:none; border:1px solid #ccc; margin:1rem; padding:0.5rem; background:#fff; max-height:200px; overflow:auto;}
+    .user { display:flex; align-items:center; margin:6px 0; }
+    .user img { width:28px; height:28px; border-radius:50%; margin-right:8px; object-fit:cover; }
   </style>
 </head>
 <body>
@@ -20,125 +23,203 @@
 
   <div id="register">
     <h3>Registrazione</h3>
-    <input id="name" placeholder="Nome e Cognome" maxlength="50">
-    <input type="file" id="photo" accept="image/*">
-    <button onclick="registerUser()">Entra in chat</button>
+    <input id="name" placeholder="Nome e Cognome" maxlength="80" /><br/>
+    <input type="file" id="photo" accept="image/*" /><br/>
+    <button id="enterBtn">Entra in chat</button>
   </div>
 
   <div id="chat-section" style="display:none;">
-    <div id="users-online">Utenti online: <span id="online-count">0</span></div>
+    <div id="users-online" onclick="toggleUserList()">Utenti online: <span id="online-count">0</span></div>
+    <div id="online-list"></div>
+
     <div id="chat"></div>
-    <input id="msg" placeholder="Scrivi il tuo messaggio" maxlength="240">
-    <button onclick="sendMessage()">Invia</button>
+
+    <input id="msg" placeholder="Scrivi il tuo messaggio" maxlength="240" />
+    <button id="sendBtn">Invia</button>
   </div>
 
-  <script>
-    let socket;
-    let userData = JSON.parse(localStorage.getItem("userData"));
+<script>
+/* CONFIGURAZIONE GEOGRAFICA */
+const AVEZZANO_LAT = 42.032;
+const AVEZZANO_LON = 13.425;
+const MAX_DISTANCE_KM = 5; // raggio in km
 
-    const AVEZZANO_LAT = 42.032;
-    const AVEZZANO_LON = 13.425;
-    const MAX_DISTANCE_KM = 5; // raggio massimo
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2-lat1)*Math.PI/180;
+  const dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+            Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180) *
+            Math.sin(dLon/2)*Math.sin(dLon/2);
+  const c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R*c;
+}
 
-    // Formula di Haversine per calcolare distanza tra due coordinate
-    function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
-      const R = 6371; // raggio Terra in km
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const a =
-        Math.sin(dLat/2) * Math.sin(dLat/2) +
-        Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) *
-        Math.sin(dLon/2) * Math.sin(dLon/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      return R * c;
+/* Stato locale */
+let socket = null;
+let userData = JSON.parse(localStorage.getItem('userData') || 'null');
+
+/* ELEMENTI UI */
+const enterBtn = document.getElementById('enterBtn');
+const sendBtn = document.getElementById('sendBtn');
+
+enterBtn.addEventListener('click', onRegisterClick);
+sendBtn.addEventListener('click', sendMessage);
+
+document.getElementById('msg').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') sendMessage();
+});
+
+function showRegister() {
+  document.getElementById('register').style.display = 'block';
+  document.getElementById('chat-section').style.display = 'none';
+}
+
+function showChat() {
+  document.getElementById('register').style.display = 'none';
+  document.getElementById('chat-section').style.display = 'block';
+}
+
+/* Se esistono dati salvati, verifichiamo comunque la posizione (richiede permesso) */
+if (userData && userData.name && userData.profilePic) {
+  // proviamo a ottenere la posizione e validare; se ok -> startChat, altrimenti reset e mostra register
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const d = haversine(pos.coords.latitude, pos.coords.longitude, AVEZZANO_LAT, AVEZZANO_LON);
+      if (d <= MAX_DISTANCE_KM) {
+        startChat(); // dati già presenti
+      } else {
+        alert('Accesso consentito solo da Avezzano. Sei a ' + d.toFixed(2) + ' km.');
+        localStorage.removeItem('userData');
+        userData = null;
+        showRegister();
+      }
+    },
+    (err) => {
+      // se l'utente blocca la geolocazione, chiediamo nuovamente registrazione (forziamo la posizione)
+      alert('Devi consentire la geolocalizzazione per usare questa chat.');
+      localStorage.removeItem('userData');
+      userData = null;
+      showRegister();
+    },
+    { timeout: 10000 }
+  );
+} else {
+  showRegister();
+}
+
+/* Funzione chiamata alla pressione di "Entra in chat" */
+function onRegisterClick() {
+  const name = (document.getElementById('name').value || '').trim();
+  const photoFile = document.getElementById('photo').files[0];
+
+  if (!/^[A-Za-zÀ-Ýà-ÿ\s]+$/.test(name) || name.split(/\s+/).length < 2) {
+    alert('Inserisci nome e cognome validi (senza numeri o simboli).');
+    return;
+  }
+  if (!photoFile) {
+    alert('Carica una foto profilo.');
+    return;
+  }
+
+  // otteniamo la posizione e verifichiamo se è dentro il raggio
+  navigator.geolocation.getCurrentPosition((pos) => {
+    const d = haversine(pos.coords.latitude, pos.coords.longitude, AVEZZANO_LAT, AVEZZANO_LON);
+    if (d > MAX_DISTANCE_KM) {
+      alert('Accesso consentito solo da Avezzano. Distanza rilevata: ' + d.toFixed(2) + ' km');
+      return;
     }
 
-    // Se i dati sono già salvati, entra subito in chat
-    if (userData && userData.name && userData.profilePic) {
+    // converte immagine in base64 e salva userData
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      userData = { name: name.replace(/\s+/g,' '), profilePic: e.target.result };
+      localStorage.setItem('userData', JSON.stringify(userData));
       startChat();
+    };
+    reader.readAsDataURL(photoFile);
+
+  }, (err) => {
+    alert('Per accedere devi consentire la geolocalizzazione.');
+  }, { timeout: 10000 });
+}
+
+/* Start chat: connessione websocket + invio join */
+function startChat() {
+  showChat();
+
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    // se già connessi, reinvia registro
+    socket.send(JSON.stringify({ type: 'join', name: userData.name, profilePic: userData.profilePic }));
+    return;
+  }
+
+  socket = new WebSocket('wss://' + window.location.host);
+
+  socket.addEventListener('open', () => {
+    // invia join al server per registrare nome+foto
+    socket.send(JSON.stringify({ type: 'join', name: userData.name, profilePic: userData.profilePic }));
+  });
+
+  socket.addEventListener('message', (ev) => {
+    let data;
+    try { data = JSON.parse(ev.data); } catch(e){ return; }
+
+    if (data.type === 'chat') {
+      const div = document.createElement('div');
+      div.className = 'msg';
+      const img = document.createElement('img');
+      img.src = data.profilePic || '';
+      const span = document.createElement('span');
+      span.textContent = (data.user || 'Utente') + ': ' + (data.message || '');
+      div.appendChild(img);
+      div.appendChild(span);
+      document.getElementById('chat').appendChild(div);
+      document.getElementById('chat').scrollTop = document.getElementById('chat').scrollHeight;
+    } else if (data.type === 'online') {
+      document.getElementById('online-count').textContent = data.count;
+      updateOnlineList(data.users || []);
     }
+  });
 
-    function registerUser() {
-      const name = document.getElementById("name").value.trim();
-      const photoFile = document.getElementById("photo").files[0];
+  socket.addEventListener('close', () => {
+    // opzione: mostra avviso oppure tentativo di riconnessione
+    console.log('Connessione WebSocket chiusa');
+  });
+}
 
-      // Controllo nome e cognome (almeno 2 parole, solo lettere e spazi)
-      if (!/^[A-Za-zÀ-ÿ\s]+$/.test(name) || name.split(" ").length < 2) {
-        alert("Inserisci nome e cognome validi (senza numeri o simboli).");
-        return;
-      }
+/* Invio messaggio */
+function sendMessage() {
+  const input = document.getElementById('msg');
+  const text = (input.value || '').trim();
+  if (!text || !socket || socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify({ type: 'chat', message: text }));
+  // visualizziamo subito il messaggio locale (opzionale, server ridiffonderà comunque)
+  // NOTA: server invierà indietro il messaggio a tutti inclusi mittente
+  input.value = '';
+}
 
-      if (!photoFile) {
-        alert("Carica una foto profilo.");
-        return;
-      }
-
-      // Ottieni posizione GPS
-      navigator.geolocation.getCurrentPosition((position) => {
-        const userLat = position.coords.latitude;
-        const userLon = position.coords.longitude;
-
-        const distance = getDistanceFromLatLonInKm(userLat, userLon, AVEZZANO_LAT, AVEZZANO_LON);
-
-        if (distance > MAX_DISTANCE_KM) {
-          alert("Accesso consentito solo da Avezzano. Distanza rilevata: " + distance.toFixed(2) + " km");
-          return;
-        }
-
-        // Se tutto ok → salva dati
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          const profilePic = e.target.result;
-          userData = { name, profilePic };
-          localStorage.setItem("userData", JSON.stringify(userData));
-          startChat();
-        };
-        reader.readAsDataURL(photoFile);
-      }, (err) => {
-        alert("Per accedere devi consentire la geolocalizzazione.");
-      });
-    }
-
-    function startChat() {
-      document.getElementById("register").style.display = "none";
-      document.getElementById("chat-section").style.display = "block";
-
-      socket = new WebSocket("wss://" + window.location.host);
-
-      socket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === "chat") {
-          const div = document.createElement("div");
-          div.classList.add("msg");
-
-          const img = document.createElement("img");
-          img.src = data.profilePic || "default.png";
-
-          const text = document.createElement("span");
-          text.textContent = data.user + ": " + data.message;
-
-          div.appendChild(img);
-          div.appendChild(text);
-          document.getElementById("chat").appendChild(div);
-          document.getElementById("chat").scrollTop = document.getElementById("chat").scrollHeight;
-        } else if (data.type === "online") {
-          document.getElementById("online-count").textContent = data.count;
-        }
-      };
-    }
-
-    function sendMessage() {
-      const input = document.getElementById("msg");
-      if (input.value.trim() !== "") {
-        socket.send(JSON.stringify({ 
-          type: "chat", 
-          user: userData.name, 
-          profilePic: userData.profilePic,
-          message: input.value 
-        }));
-        input.value = "";
-      }
-    }
-  </script>
+/* Lista utenti */
+function toggleUserList() {
+  const list = document.getElementById('online-list');
+  list.style.display = (list.style.display === 'none' || list.style.display === '') ? 'block' : 'none';
+}
+function updateOnlineList(users) {
+  const list = document.getElementById('online-list');
+  list.innerHTML = '';
+  users.forEach(u => {
+    const row = document.createElement('div');
+    row.className = 'user';
+    const img = document.createElement('img');
+    img.src = u.profilePic || '';
+    const span = document.createElement('span');
+    span.textContent = u.name || 'Senza nome';
+    row.appendChild(img);
+    row.appendChild(span);
+    list.appendChild(row);
+  });
+}
+</script>
 </body>
 </html>
+
