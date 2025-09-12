@@ -232,8 +232,39 @@ function sendPrivateMessage() {
 function appendMessage(containerSelector, data) {
   const div = document.createElement('div');
   div.className = 'msg';
+
   const img = document.createElement('img');
   img.src = data.profilePic || '';
+
   const span = document.createElement('span');
-  span.textContent = (data.user || 'Utente
+  span.textContent = (data.user || 'Utente') + ": " + (data.message || '');
+
+  div.appendChild(img);
+  div.appendChild(span);
+
+  document.querySelector(containerSelector).appendChild(div);
+  const container = document.querySelector(containerSelector);
+  container.scrollTop = container.scrollHeight;
+}
+
+function appendPrivateMessage(from, message, profilePic) {
+  const div = document.createElement('div');
+  div.className = 'msg';
+
+  const img = document.createElement('img');
+  img.src = profilePic || '';
+
+  const span = document.createElement('span');
+  span.textContent = from + ": " + message;
+
+  div.appendChild(img);
+  div.appendChild(span);
+
+  document.getElementById('private-messages').appendChild(div);
+  const container = document.getElementById('private-messages');
+  container.scrollTop = container.scrollHeight;
+}
+</script>
+</body>
+</html>
 
