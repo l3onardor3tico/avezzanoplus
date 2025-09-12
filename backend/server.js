@@ -26,11 +26,13 @@ function broadcast(msg) {
 
 /* Invia lista utenti online */
 function broadcastOnline() {
-  const users = Array.from(clients.values()).map(u => ({ name: u.name, profilePic: u.profilePic }));
+  const users = Array.from(clients.values())
+    .filter(u => u.name) // solo registrati
+    .map(u => ({ name: u.name, profilePic: u.profilePic }));
   broadcast({ type: 'online', count: users.length, users });
 }
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws) => {
   console.log('Nuovo client connesso');
   clients.set(ws, { name: null, profilePic: null });
 
@@ -40,15 +42,24 @@ wss.on('connection', (ws, req) => {
 
     // Registrazione/join
     if (data.type === 'join' || data.type === 'register') {
-      clients.set(ws, { name: data.name || data.user || 'Utente', profilePic: data.profilePic || '' });
-      console.log('Registrato utente:', clients.get(ws).name);
+      if (!data.name) {
+        console.log('Registrazione senza nome, ignorata.');
+        return;
+      }
+      clients.set(ws, { 
+        name: data.name, 
+        profilePic: data.profilePic || '' 
+      });
+      console.log('Registrato utente:', data.name);
       broadcastOnline();
       return;
     }
 
     // Messaggio pubblico
     if (data.type === 'chat') {
-      const info = clients.get(ws) || { name: 'Utente', profilePic: '' };
+      const info = clients.get(ws);
+      if (!info || !info.name) return; // non registrato
+
       const outgoing = {
         type: 'chat',
         user: info.name,
@@ -79,14 +90,13 @@ wss.on('connection', (ws, req) => {
         }
       }
 
-      // invia conferma al mittente
+      // conferma al mittente
       ws.send(JSON.stringify({
         type: 'private',
         from: "Me",
         profilePic: sender.profilePic,
         message
       }));
-
       return;
     }
   });
@@ -97,3 +107,4 @@ wss.on('connection', (ws, req) => {
     console.log('Client disconnesso, utenti online:', clients.size);
   });
 });
+
