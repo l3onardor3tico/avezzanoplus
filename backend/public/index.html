@@ -5,266 +5,201 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Avezzano Plus</title>
   <style>
-    body { font-family: sans-serif; background: #f9f9f9; margin:0; padding:0; }
+    body { font-family: sans-serif; background: #f9f9f9; margin:0; padding:0; display:flex; height:100vh; }
     header { background:#007bff; color:#fff; padding:1rem; text-align:center; }
-    #chat { height: 400px; overflow-y:auto; border:1px solid #ccc; padding:1rem; background:#fff; margin:1rem; }
-    #users-online { font-size:0.95rem; color:#007bff; margin:1rem; cursor:pointer; }
     input, button { padding:0.5rem; margin:0.25rem; }
-    #register { margin:1rem; }
+
+    /* Layout principale */
+    #sidebar {
+      width: 220px;
+      background: #fff;
+      border-right:1px solid #ccc;
+      display:flex;
+      flex-direction:column;
+    }
+    #chat-list {
+      flex:1;
+      overflow-y:auto;
+    }
+    .chat-entry {
+      padding:0.75rem;
+      cursor:pointer;
+      border-bottom:1px solid #eee;
+    }
+    .chat-entry.active {
+      background:#eef5ff;
+      font-weight:bold;
+    }
+
+    #main {
+      flex:1;
+      display:flex;
+      flex-direction:column;
+    }
+    #messages {
+      flex:1;
+      overflow-y:auto;
+      padding:1rem;
+      background:#fff;
+      border-bottom:1px solid #ccc;
+    }
     .msg { display:flex; align-items:center; margin-bottom:6px; }
     .msg img { width:32px; height:32px; border-radius:50%; margin-right:8px; object-fit:cover; }
-    #online-list { display:none; border:1px solid #ccc; margin:1rem; padding:0.5rem; background:#fff; max-height:200px; overflow:auto;}
-    .user { display:flex; align-items:center; margin:6px 0; cursor:pointer; }
+
+    #composer {
+      padding:0.5rem;
+      background:#f1f1f1;
+      display:flex;
+    }
+    #composer input { flex:1; }
+    #online-toggle { margin:0.5rem; cursor:pointer; color:#007bff; }
+    #online-list { display:none; max-height:200px; overflow:auto; border:1px solid #ccc; margin:0.5rem; background:#fff; }
+    .user { display:flex; align-items:center; margin:6px; cursor:pointer; }
     .user img { width:28px; height:28px; border-radius:50%; margin-right:8px; object-fit:cover; }
-    /* CHAT PRIVATA */
-    #private-chat { display:none; border:1px solid #007bff; margin:1rem; padding:1rem; background:#eef5ff; }
-    #private-chat h3 { margin-top:0; }
+
+    #register { margin:2rem auto; text-align:center; }
   </style>
 </head>
 <body>
-  <header>Avezzano Plus – Chat Pubblica</header>
-
-  <div id="register">
-    <h3>Registrazione</h3>
-    <input id="name" placeholder="Nome e Cognome" maxlength="80" /><br/>
-    <input type="file" id="photo" accept="image/*" /><br/>
-    <button id="enterBtn">Entra in chat</button>
+  <!-- Sidebar -->
+  <div id="sidebar" style="display:none;">
+    <header>Chats</header>
+    <div id="chat-list">
+      <!-- Voci: Chat pubblica + private aperte -->
+    </div>
   </div>
 
-  <div id="chat-section" style="display:none;">
-    <div id="users-online" onclick="toggleUserList()">Utenti online: <span id="online-count">0</span></div>
-    <div id="online-list"></div>
+  <!-- Main -->
+  <div id="main">
+    <!-- Registrazione -->
+    <div id="register">
+      <h3>Registrazione</h3>
+      <input id="name" placeholder="Nome e Cognome" maxlength="80" /><br/>
+      <input type="file" id="photo" accept="image/*" /><br/>
+      <button id="enterBtn">Entra in chat</button>
+    </div>
 
-    <div id="chat"></div>
+    <!-- Chat -->
+    <div id="chat-section" style="display:none; flex:1; flex-direction:column;">
+      <div id="online-toggle" onclick="toggleUserList()">Utenti online: <span id="online-count">0</span></div>
+      <div id="online-list"></div>
 
-    <input id="msg" placeholder="Scrivi il tuo messaggio" maxlength="240" />
-    <button id="sendBtn">Invia</button>
-  </div>
+      <div id="messages"></div>
 
-  <!-- CHAT PRIVATA -->
-  <div id="private-chat">
-    <h3 id="private-title">Chat privata con ...</h3>
-    <div id="private-messages" style="height:200px; overflow-y:auto; background:#fff; padding:0.5rem; border:1px solid #ccc; margin-bottom:0.5rem;"></div>
-    <input id="private-msg" placeholder="Scrivi un messaggio privato" maxlength="240" />
-    <button onclick="sendPrivateMessage()">Invia</button>
-    <button onclick="closePrivateChat()">Chiudi</button>
+      <div id="composer">
+        <input id="msg" placeholder="Scrivi un messaggio" maxlength="240" />
+        <button id="sendBtn">Invia</button>
+      </div>
+    </div>
   </div>
 
 <script>
-/* CONFIGURAZIONE GEOGRAFICA */
-const AVEZZANO_LAT = 42.032;
-const AVEZZANO_LON = 13.425;
-const MAX_DISTANCE_KM = 5; // raggio in km
-
+/* CONFIG GEO */
+const AVEZZANO_LAT = 42.032, AVEZZANO_LON = 13.425, MAX_DISTANCE_KM = 5;
 function haversine(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = (lat2-lat1)*Math.PI/180;
-  const dLon = (lon2-lon1)*Math.PI/180;
-  const a = Math.sin(dLat/2)*Math.sin(dLat/2) +
-            Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180) *
-            Math.sin(dLon/2)*Math.sin(dLon/2);
-  const c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R*c;
+  const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
 
-/* Stato locale */
-let socket = null;
-let userData = JSON.parse(localStorage.getItem('userData') || 'null');
-let privateTarget = null; // destinatario chat privata
+/* Stato */
+let socket=null, userData=JSON.parse(localStorage.getItem('userData')||'null');
+let chats={"pubblica":[]}; // memorizza messaggi
+let currentChat="pubblica"; // chat attiva
+let knownPrivates=new Set();
 
-/* ELEMENTI UI */
-const enterBtn = document.getElementById('enterBtn');
-const sendBtn = document.getElementById('sendBtn');
-
+/* UI */
+const enterBtn=document.getElementById('enterBtn');
+const sendBtn=document.getElementById('sendBtn');
 enterBtn.addEventListener('click', onRegisterClick);
 sendBtn.addEventListener('click', sendMessage);
+document.getElementById('msg').addEventListener('keydown',(e)=>{if(e.key==="Enter")sendMessage();});
 
-document.getElementById('msg').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') sendMessage();
-});
-document.getElementById('private-msg').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') sendPrivateMessage();
-});
+/* Funzioni UI */
+function showRegister(){document.getElementById('register').style.display='block'; document.getElementById('sidebar').style.display='none'; document.getElementById('chat-section').style.display='none';}
+function showChat(){document.getElementById('register').style.display='none'; document.getElementById('sidebar').style.display='flex'; document.getElementById('chat-section').style.display='flex';}
 
-function showRegister() {
-  document.getElementById('register').style.display = 'block';
-  document.getElementById('chat-section').style.display = 'none';
-}
+/* Avvio se già salvato */
+if(userData && userData.name && userData.profilePic){
+  navigator.geolocation.getCurrentPosition((pos)=>{
+    const d=haversine(pos.coords.latitude,pos.coords.longitude,AVEZZANO_LAT,AVEZZANO_LON);
+    if(d<=MAX_DISTANCE_KM) startChat(); else {alert("Fuori da Avezzano"); localStorage.removeItem('userData'); showRegister();}
+  },()=>{alert("Serve la geolocalizzazione");localStorage.removeItem('userData');showRegister();});
+}else showRegister();
 
-function showChat() {
-  document.getElementById('register').style.display = 'none';
-  document.getElementById('chat-section').style.display = 'block';
-}
-
-/* Se esistono dati salvati, verifichiamo comunque la posizione */
-if (userData && userData.name && userData.profilePic) {
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      const d = haversine(pos.coords.latitude, pos.coords.longitude, AVEZZANO_LAT, AVEZZANO_LON);
-      if (d <= MAX_DISTANCE_KM) {
-        startChat();
-      } else {
-        alert('Accesso consentito solo da Avezzano. Sei a ' + d.toFixed(2) + ' km.');
-        localStorage.removeItem('userData');
-        userData = null;
-        showRegister();
-      }
-    },
-    () => { alert('Devi consentire la geolocalizzazione per usare questa chat.'); localStorage.removeItem('userData'); userData = null; showRegister(); },
-    { timeout: 10000 }
-  );
-} else {
-  showRegister();
-}
-
-function onRegisterClick() {
-  const name = (document.getElementById('name').value || '').trim();
-  const photoFile = document.getElementById('photo').files[0];
-
-  if (!/^[A-Za-zÀ-Ýà-ÿ\s]+$/.test(name) || name.split(/\s+/).length < 2) {
-    alert('Inserisci nome e cognome validi (senza numeri o simboli).');
-    return;
-  }
-  if (!photoFile) {
-    alert('Carica una foto profilo.');
-    return;
-  }
-
-  navigator.geolocation.getCurrentPosition((pos) => {
-    const d = haversine(pos.coords.latitude, pos.coords.longitude, AVEZZANO_LAT, AVEZZANO_LON);
-    if (d > MAX_DISTANCE_KM) {
-      alert('Accesso consentito solo da Avezzano. Distanza rilevata: ' + d.toFixed(2) + ' km');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      userData = { name: name.replace(/\s+/g,' '), profilePic: e.target.result };
-      localStorage.setItem('userData', JSON.stringify(userData));
+function onRegisterClick(){
+  const name=(document.getElementById('name').value||"").trim();
+  const file=document.getElementById('photo').files[0];
+  if(!/^[A-Za-zÀ-Ýà-ÿ\s]+$/.test(name)||name.split(/\s+/).length<2){alert("Inserisci nome e cognome validi");return;}
+  if(!file){alert("Carica una foto profilo");return;}
+  navigator.geolocation.getCurrentPosition((pos)=>{
+    if(haversine(pos.coords.latitude,pos.coords.longitude,AVEZZANO_LAT,AVEZZANO_LON)>MAX_DISTANCE_KM){alert("Accesso solo da Avezzano");return;}
+    const reader=new FileReader(); reader.onload=e=>{
+      userData={name:name.replace(/\s+/g,' '),profilePic:e.target.result};
+      localStorage.setItem('userData',JSON.stringify(userData));
       startChat();
-    };
-    reader.readAsDataURL(photoFile);
-
-  }, () => { alert('Per accedere devi consentire la geolocalizzazione.'); }, { timeout: 10000 });
+    }; reader.readAsDataURL(file);
+  },()=>alert("Serve geolocalizzazione"),{timeout:10000});
 }
 
-function startChat() {
+function startChat(){
   showChat();
-
-  socket = new WebSocket('wss://' + window.location.host);
-
-  socket.addEventListener('open', () => {
-    socket.send(JSON.stringify({ type: 'join', name: userData.name, profilePic: userData.profilePic }));
-  });
-
-  socket.addEventListener('message', (ev) => {
-    let data;
-    try { data = JSON.parse(ev.data); } catch(e){ return; }
-
-    if (data.type === 'chat') {
-      appendMessage('#chat', data);
-    } else if (data.type === 'online') {
-      document.getElementById('online-count').textContent = data.count;
-      updateOnlineList(data.users || []);
-    } else if (data.type === 'private') {
-      if (data.from && data.message) {
-        openPrivateChat({ name: data.from, profilePic: data.profilePic });
-        appendPrivateMessage(data.from, data.message, data.profilePic);
-      }
+  addChatEntry("pubblica","Chat Pubblica"); // entry fissa
+  socket=new WebSocket('wss://'+window.location.host);
+  socket.addEventListener('open',()=>{socket.send(JSON.stringify({type:'join',name:userData.name,profilePic:userData.profilePic}));});
+  socket.addEventListener('message',(ev)=>{
+    let data; try{data=JSON.parse(ev.data);}catch{return;}
+    if(data.type==="chat"){chats.pubblica.push(data); if(currentChat==="pubblica") appendMessage(data);}
+    else if(data.type==="online"){document.getElementById('online-count').textContent=data.count; updateOnlineList(data.users||[]);}
+    else if(data.type==="private"){const key=data.from===userData.name?"Me":data.from;
+      if(!chats[key]){chats[key]=[]; knownPrivates.add(key); addChatEntry(key,"Chat con "+key);}
+      chats[key].push(data); if(currentChat===key) appendMessage(data);
     }
   });
 }
 
-function sendMessage() {
-  const input = document.getElementById('msg');
-  const text = (input.value || '').trim();
-  if (!text || !socket || socket.readyState !== WebSocket.OPEN) return;
-  socket.send(JSON.stringify({ type: 'chat', message: text }));
-  input.value = '';
+/* Sidebar */
+function addChatEntry(id,label){
+  if(document.querySelector(`[data-chat='${id}']`)) return;
+  const div=document.createElement('div'); div.className='chat-entry'; div.dataset.chat=id; div.textContent=label;
+  div.onclick=()=>switchChat(id); document.getElementById('chat-list').appendChild(div);
+}
+function switchChat(id){
+  currentChat=id;
+  document.querySelectorAll('.chat-entry').forEach(e=>e.classList.remove('active'));
+  document.querySelector(`[data-chat='${id}']`).classList.add('active');
+  document.getElementById('messages').innerHTML='';
+  (chats[id]||[]).forEach(msg=>appendMessage(msg));
 }
 
-/* GESTIONE LISTA UTENTI */
-function toggleUserList() {
-  const list = document.getElementById('online-list');
-  list.style.display = (list.style.display === 'none' || list.style.display === '') ? 'block' : 'none';
+/* Messaggi */
+function appendMessage(data){
+  const div=document.createElement('div'); div.className='msg';
+  const img=document.createElement('img'); img.src=data.profilePic||'';
+  const span=document.createElement('span'); span.textContent=(data.user||data.from||'Utente')+": "+(data.message||'');
+  div.appendChild(img); div.appendChild(span);
+  document.getElementById('messages').appendChild(div);
+  document.getElementById('messages').scrollTop=document.getElementById('messages').scrollHeight;
 }
-function updateOnlineList(users) {
-  const list = document.getElementById('online-list');
-  list.innerHTML = '';
-  users.forEach(u => {
-    const row = document.createElement('div');
-    row.className = 'user';
-    const img = document.createElement('img');
-    img.src = u.profilePic || '';
-    const span = document.createElement('span');
-    span.textContent = u.name || 'Senza nome';
-    row.appendChild(img);
-    row.appendChild(span);
+function sendMessage(){
+  const input=document.getElementById('msg'); const text=input.value.trim(); if(!text||!socket||socket.readyState!==WebSocket.OPEN) return;
+  if(currentChat==="pubblica"){socket.send(JSON.stringify({type:'chat',message:text}));}
+  else {socket.send(JSON.stringify({type:'private',to:currentChat,message:text})); chats[currentChat].push({from:"Me",profilePic:userData.profilePic,message:text}); if(currentChat) appendMessage({from:"Me",profilePic:userData.profilePic,message:text});}
+  input.value='';
+}
 
-    // click per aprire chat privata
-    row.addEventListener('click', () => {
-      openPrivateChat(u);
-    });
-
+/* Lista utenti online */
+function toggleUserList(){const l=document.getElementById('online-list');l.style.display=(l.style.display==='none'||l.style.display==='')?'block':'none';}
+function updateOnlineList(users){
+  const list=document.getElementById('online-list'); list.innerHTML='';
+  users.forEach(u=>{
+    const row=document.createElement('div'); row.className='user';
+    const img=document.createElement('img'); img.src=u.profilePic||''; const span=document.createElement('span'); span.textContent=u.name;
+    row.appendChild(img); row.appendChild(span);
+    row.onclick=()=>{if(!chats[u.name]){chats[u.name]=[];knownPrivates.add(u.name);addChatEntry(u.name,"Chat con "+u.name);} switchChat(u.name);}
     list.appendChild(row);
   });
-}
-
-/* CHAT PRIVATA */
-function openPrivateChat(target) {
-  privateTarget = target;
-  document.getElementById('private-title').textContent = "Chat privata con " + target.name;
-  document.getElementById('private-chat').style.display = 'block';
-}
-function closePrivateChat() {
-  privateTarget = null;
-  document.getElementById('private-chat').style.display = 'none';
-  document.getElementById('private-messages').innerHTML = '';
-}
-function sendPrivateMessage() {
-  const input = document.getElementById('private-msg');
-  const text = input.value.trim();
-  if (!text || !socket || socket.readyState !== WebSocket.OPEN || !privateTarget) return;
-  socket.send(JSON.stringify({ type: 'private', to: privateTarget.name, message: text }));
-  appendPrivateMessage("Me", text, userData.profilePic);
-  input.value = '';
-}
-function appendMessage(containerSelector, data) {
-  const div = document.createElement('div');
-  div.className = 'msg';
-
-  const img = document.createElement('img');
-  img.src = data.profilePic || '';
-
-  const span = document.createElement('span');
-  span.textContent = (data.user || 'Utente') + ": " + (data.message || '');
-
-  div.appendChild(img);
-  div.appendChild(span);
-
-  document.querySelector(containerSelector).appendChild(div);
-  const container = document.querySelector(containerSelector);
-  container.scrollTop = container.scrollHeight;
-}
-
-function appendPrivateMessage(from, message, profilePic) {
-  const div = document.createElement('div');
-  div.className = 'msg';
-
-  const img = document.createElement('img');
-  img.src = profilePic || '';
-
-  const span = document.createElement('span');
-  span.textContent = from + ": " + message;
-
-  div.appendChild(img);
-  div.appendChild(span);
-
-  document.getElementById('private-messages').appendChild(div);
-  const container = document.getElementById('private-messages');
-  container.scrollTop = container.scrollHeight;
 }
 </script>
 </body>
 </html>
-
