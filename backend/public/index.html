@@ -339,7 +339,44 @@ function sendMessage() {
 }
 
 /* ---------- ONLINE LIST ---------- */
-function toggleOnlineList() {
+/* ONLINE LIST */
+#online-list {
+  display:none;
+  background:#fff;
+  border:1px solid #ddd;
+  padding:8px;
+  max-height:200px;
+  overflow:auto;
+  position:absolute;
+  top:64px;
+  left:280px;
+  width:220px;
+  z-index:50;
+  box-shadow:0 2px 6px rgba(0,0,0,0.15);
+}
+
+/* --- FIX per mobile --- */
+@media (max-width: 768px) {
+  #online-list {
+    position:fixed;
+    top:0;
+    left:0;
+    right:0;
+    bottom:0;
+    width:auto;
+    height:auto;
+    max-height:none;
+    z-index:999;
+    padding:16px;
+    overflow-y:auto;
+  }
+  #online-list .user {
+    padding:12px 0;
+    border-bottom:1px solid #eee;
+  }
+}
+
+  function toggleOnlineList() {
   onlineListEl.style.display = (onlineListEl.style.display === 'none' || onlineListEl.style.display === '') ? 'block' : 'none';
 }
 function updateOnlineList(users) {
