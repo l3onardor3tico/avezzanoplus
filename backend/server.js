@@ -12,9 +12,10 @@ server.listen(PORT, () => {
   console.log(`WebSocket server in ascolto sulla porta ${PORT}`);
 });
 
-const clients = new Map(); // ws => { name, profilePic }
+/* Mappa client -> { name, profilePic } */
+const clients = new Map();
 
-/* Broadcast a tutti */
+/* Broadcast helper */
 function broadcast(msg) {
   const json = JSON.stringify(msg);
   for (const client of wss.clients) {
@@ -24,14 +25,12 @@ function broadcast(msg) {
   }
 }
 
-/* Lista utenti online */
+/* Invia lista utenti online */
 function broadcastOnline() {
   const users = Array.from(clients.values())
     .filter(u => u.name)
     .map(u => ({ name: u.name, profilePic: u.profilePic }));
-  const payload = { type: 'online', count: users.length, users };
-  broadcast(payload);
-  console.log("Broadcast online:", payload);
+  broadcast({ type: 'online', count: users.length, users });
 }
 
 wss.on('connection', (ws) => {
@@ -45,14 +44,9 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    console.log("Ricevuto:", data);
-
-    // Registrazione
+    // Registrazione utente
     if (data.type === 'join') {
-      if (!data.name) {
-        console.log("Join ricevuto senza nome, ignorato");
-        return;
-      }
+      if (!data.name) return;
       clients.set(ws, { name: data.name, profilePic: data.profilePic || "" });
       console.log("Registrato utente:", data.name);
       broadcastOnline();
@@ -62,10 +56,7 @@ wss.on('connection', (ws) => {
     // Messaggio pubblico
     if (data.type === 'chat') {
       const info = clients.get(ws);
-      if (!info || !info.name) {
-        console.log("Chat rifiutata: utente non registrato");
-        return;
-      }
+      if (!info || !info.name) return;
       const outgoing = {
         type: 'chat',
         user: info.name,
@@ -91,6 +82,7 @@ wss.on('connection', (ws) => {
           }));
         }
       }
+      // Conferma al mittente
       ws.send(JSON.stringify({
         type: 'private',
         from: "Me",
