@@ -11,20 +11,37 @@
       padding: 0;
       font-family: sans-serif;
       background: #f9f9f9;
-      overflow-x: hidden;
+      overflow: hidden; /* niente scroll extra */
     }
+
     header {
       background:#007bff;
       color:#fff;
       padding:1rem;
       text-align:center;
       flex-shrink: 0;
+      position: relative;
     }
+
+    #toggle-sidebar {
+      position:absolute;
+      left:10px;
+      top:10px;
+      background:#fff;
+      border:1px solid #ccc;
+      padding:0.25rem 0.5rem;
+      cursor:pointer;
+      border-radius:4px;
+      display:none;
+    }
+
     #app {
       display: flex;
-      height: calc(100% - 64px);
+      height: calc(100% - 64px); /* togli l’header */
       overflow: hidden;
     }
+
+    /* Sidebar */
     #sidebar {
       background:#fff;
       border-right:1px solid #ccc;
@@ -52,12 +69,15 @@
       background:#dbe8ff;
       font-weight:bold;
     }
+
+    /* Chat area */
     #main {
       flex:1;
       display:flex;
       flex-direction:column;
-      min-width: 0;
+      min-width:0;
     }
+
     #chat-window {
       flex:1;
       overflow-y:auto;
@@ -76,6 +96,7 @@
       margin-right:8px;
       object-fit:cover;
     }
+
     #input-bar {
       display:flex;
       border-top:1px solid #ccc;
@@ -98,6 +119,7 @@
       border-radius:4px;
       font-size:1rem;
     }
+
     #online-list {
       border-top:1px solid #ccc;
       max-height:150px;
@@ -117,6 +139,8 @@
       margin-right:8px;
       object-fit:cover;
     }
+
+    /* Mobile */
     @media (max-width:768px) {
       #sidebar {
         position:absolute;
@@ -130,23 +154,14 @@
       #sidebar.show {
         left:0;
       }
-      #toggle-sidebar {
-        position:absolute;
-        left:10px;
-        top:10px;
-        background:#fff;
-        border:1px solid #ccc;
-        padding:0.25rem 0.5rem;
-        cursor:pointer;
-        border-radius:4px;
-      }
+      #toggle-sidebar { display:inline-block; }
     }
   </style>
 </head>
 <body>
   <header>
     Avezzano Plus
-    <button id="toggle-sidebar" style="display:none;">☰</button>
+    <button id="toggle-sidebar">☰</button>
   </header>
 
   <div id="app">
@@ -169,22 +184,11 @@
   </div>
 
 <script>
-/* COSTANTI GEO */
-const AVEZZANO_LAT = 42.0214, AVEZZANO_LON = 13.4256, MAX_DISTANCE_KM = 15;
-function haversine(lat1, lon1, lat2, lon2) {
-  function toRad(x){return x*Math.PI/180;}
-  const R=6371, dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
-  const a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
-  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-}
-
-/* VARIABILI */
 let socket;
 let userData = JSON.parse(localStorage.getItem('userData') || 'null');
 let activeChat = "public";
 let chats = { public: [] };
 
-/* UI */
 const chatWindow = document.getElementById('chat-window');
 const sendBtn = document.getElementById('sendBtn');
 const msgInput = document.getElementById('msg');
@@ -192,6 +196,15 @@ const chatList = document.getElementById('chat-list');
 const onlineList = document.getElementById('online-list');
 const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggle-sidebar');
+
+/* Registrazione */
+async function askRegistration() {
+  const name = prompt("Inserisci il tuo nome:");
+  const pic = prompt("Inserisci URL della tua foto profilo (opzionale):") || "";
+  if (!name) return askRegistration();
+  userData = { name, profilePic: pic };
+  localStorage.setItem('userData', JSON.stringify(userData));
+}
 
 /* Mostra messaggi */
 function renderChat() {
@@ -226,7 +239,7 @@ function sendMessage() {
 sendBtn.addEventListener('click', sendMessage);
 msgInput.addEventListener('keydown', e => { if (e.key === "Enter") sendMessage(); });
 
-/* Connessione socket */
+/* WebSocket */
 function startChat() {
   socket = new WebSocket('wss://' + window.location.host);
 
@@ -244,6 +257,7 @@ function startChat() {
     } else if (data.type === "online") {
       onlineList.innerHTML = "";
       (data.users || []).forEach(u => {
+        if (u.name === userData.name) return;
         const row = document.createElement('div');
         row.className = "user";
         row.innerHTML = `<img src="${u.profilePic}"><span>${u.name}</span>`;
@@ -267,7 +281,7 @@ function openPrivateChat(name, pic) {
   setActiveChat(name);
 }
 
-/* Lista chat */
+/* Gestione lista chat */
 function ensureChatInList(name) {
   if (!chatList.querySelector(`[data-chat="${name}"]`)) {
     const li = document.createElement('li');
@@ -283,27 +297,16 @@ function setActiveChat(name) {
   renderChat();
 }
 
-/* Sidebar mobile */
-if (window.innerWidth <= 768) {
-  toggleSidebarBtn.style.display = "inline-block";
-  toggleSidebarBtn.addEventListener('click', () => {
-    sidebar.classList.toggle("show");
-  });
-}
+/* Toggle sidebar */
+toggleSidebarBtn.addEventListener('click', () => {
+  sidebar.classList.toggle("show");
+});
 
-/* GEO + START */
-if (userData) {
-  navigator.geolocation.getCurrentPosition((pos)=>{
-    const d=haversine(pos.coords.latitude,pos.coords.longitude,AVEZZANO_LAT,AVEZZANO_LON);
-    if(d<=MAX_DISTANCE_KM){ startChat(); renderChat(); }
-    else { alert("Accesso solo da Avezzano. Sei a " + d.toFixed(1) + " km."); localStorage.removeItem('userData'); }
-  },(err)=>{
-    alert("Geolocalizzazione non disponibile: devi registrarti di nuovo.");
-    localStorage.removeItem('userData');
-  },{timeout:10000});
-} else {
-  alert("Prima completa la registrazione!");
-}
+/* Avvio */
+(async () => {
+  if (!userData) await askRegistration();
+  startChat();
+})();
 </script>
 </body>
 </html>
