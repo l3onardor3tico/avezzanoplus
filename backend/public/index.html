@@ -11,9 +11,8 @@
       padding: 0;
       font-family: sans-serif;
       background: #f9f9f9;
-      overflow-x: hidden; /* niente scroll orizzontale */
+      overflow-x: hidden;
     }
-
     header {
       background:#007bff;
       color:#fff;
@@ -21,15 +20,11 @@
       text-align:center;
       flex-shrink: 0;
     }
-
-    /* Layout generale */
     #app {
       display: flex;
-      height: calc(100% - 64px); /* tolto header */
+      height: calc(100% - 64px);
       overflow: hidden;
     }
-
-    /* Sidebar (barra chat) */
     #sidebar {
       background:#fff;
       border-right:1px solid #ccc;
@@ -57,15 +52,12 @@
       background:#dbe8ff;
       font-weight:bold;
     }
-
-    /* Contenuto chat */
     #main {
       flex:1;
       display:flex;
       flex-direction:column;
-      min-width: 0; /* evita overflow */
+      min-width: 0;
     }
-
     #chat-window {
       flex:1;
       overflow-y:auto;
@@ -84,8 +76,6 @@
       margin-right:8px;
       object-fit:cover;
     }
-
-    /* Input in basso */
     #input-bar {
       display:flex;
       border-top:1px solid #ccc;
@@ -108,8 +98,6 @@
       border-radius:4px;
       font-size:1rem;
     }
-
-    /* Lista utenti online */
     #online-list {
       border-top:1px solid #ccc;
       max-height:150px;
@@ -129,8 +117,6 @@
       margin-right:8px;
       object-fit:cover;
     }
-
-    /* Mobile */
     @media (max-width:768px) {
       #sidebar {
         position:absolute;
@@ -164,7 +150,6 @@
   </header>
 
   <div id="app">
-    <!-- Sidebar -->
     <div id="sidebar">
       <h3>Chat</h3>
       <ul id="chat-list">
@@ -174,7 +159,6 @@
       <div id="online-list"></div>
     </div>
 
-    <!-- Main -->
     <div id="main">
       <div id="chat-window"></div>
       <div id="input-bar">
@@ -185,11 +169,20 @@
   </div>
 
 <script>
+/* COSTANTI GEO */
+const AVEZZANO_LAT = 42.0214, AVEZZANO_LON = 13.4256, MAX_DISTANCE_KM = 15;
+function haversine(lat1, lon1, lat2, lon2) {
+  function toRad(x){return x*Math.PI/180;}
+  const R=6371, dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+  const a=Math.sin(dLat/2)**2+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
 /* VARIABILI */
 let socket;
 let userData = JSON.parse(localStorage.getItem('userData') || 'null');
-let activeChat = "public"; // chat attiva
-let chats = { public: [] }; // memorizza messaggi pubblici e privati
+let activeChat = "public";
+let chats = { public: [] };
 
 /* UI */
 const chatWindow = document.getElementById('chat-window');
@@ -274,7 +267,7 @@ function openPrivateChat(name, pic) {
   setActiveChat(name);
 }
 
-/* Gestione lista chat */
+/* Lista chat */
 function ensureChatInList(name) {
   if (!chatList.querySelector(`[data-chat="${name}"]`)) {
     const li = document.createElement('li');
@@ -290,7 +283,7 @@ function setActiveChat(name) {
   renderChat();
 }
 
-/* Mobile: toggle sidebar */
+/* Sidebar mobile */
 if (window.innerWidth <= 768) {
   toggleSidebarBtn.style.display = "inline-block";
   toggleSidebarBtn.addEventListener('click', () => {
@@ -298,10 +291,19 @@ if (window.innerWidth <= 768) {
   });
 }
 
-/* START */
-if (userData) startChat();
-else alert("Prima completa la registrazione!");
+/* GEO + START */
+if (userData) {
+  navigator.geolocation.getCurrentPosition((pos)=>{
+    const d=haversine(pos.coords.latitude,pos.coords.longitude,AVEZZANO_LAT,AVEZZANO_LON);
+    if(d<=MAX_DISTANCE_KM){ startChat(); renderChat(); }
+    else { alert("Accesso solo da Avezzano. Sei a " + d.toFixed(1) + " km."); localStorage.removeItem('userData'); }
+  },(err)=>{
+    alert("Geolocalizzazione non disponibile: devi registrarti di nuovo.");
+    localStorage.removeItem('userData');
+  },{timeout:10000});
+} else {
+  alert("Prima completa la registrazione!");
+}
 </script>
 </body>
 </html>
-
