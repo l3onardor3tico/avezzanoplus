@@ -11,7 +11,7 @@
       padding: 0;
       font-family: sans-serif;
       background: #f9f9f9;
-      overflow: hidden;
+      overflow-x: hidden; /* niente scroll orizzontale */
     }
 
     header {
@@ -23,25 +23,14 @@
       position: relative;
     }
 
-    #toggle-sidebar {
-      position:absolute;
-      left:10px;
-      top:10px;
-      background:#fff;
-      border:1px solid #ccc;
-      padding:0.25rem 0.5rem;
-      cursor:pointer;
-      border-radius:4px;
-      display:none;
-    }
-
+    /* Layout generale */
     #app {
-      display: none; /* nascosto finché non registrato */
-      flex: 1;
-      height: calc(100% - 64px);
+      display: flex;
+      height: calc(100% - 64px); /* tolto header */
       overflow: hidden;
     }
 
+    /* Sidebar (barra chat) */
     #sidebar {
       background:#fff;
       border-right:1px solid #ccc;
@@ -61,20 +50,29 @@
       padding:0;
     }
     #chat-list li {
-      padding:0.75rem;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:0.6rem;
       border-bottom:1px solid #eee;
       cursor:pointer;
+    }
+    #chat-list li img {
+      width:28px; height:28px;
+      border-radius:50%;
+      object-fit:cover;
     }
     #chat-list li.active {
       background:#dbe8ff;
       font-weight:bold;
     }
 
+    /* Contenuto chat */
     #main {
       flex:1;
       display:flex;
       flex-direction:column;
-      min-width:0;
+      min-width: 0;
     }
 
     #chat-window {
@@ -96,6 +94,7 @@
       object-fit:cover;
     }
 
+    /* Input in basso */
     #input-bar {
       display:flex;
       border-top:1px solid #ccc;
@@ -119,6 +118,7 @@
       font-size:1rem;
     }
 
+    /* Lista utenti online */
     #online-list {
       border-top:1px solid #ccc;
       max-height:150px;
@@ -139,42 +139,7 @@
       object-fit:cover;
     }
 
-    /* Schermata registrazione */
-    #register-screen {
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;
-      height: calc(100% - 64px);
-      background:#fff;
-      gap:1rem;
-    }
-    #register-screen input {
-      padding:0.5rem;
-      font-size:1rem;
-      border:1px solid #ccc;
-      border-radius:4px;
-      width:80%;
-      max-width:300px;
-    }
-    #register-screen button {
-      padding:0.5rem 1rem;
-      font-size:1rem;
-      border:none;
-      background:#007bff;
-      color:#fff;
-      border-radius:4px;
-      cursor:pointer;
-    }
-    #preview {
-      width:80px;
-      height:80px;
-      border-radius:50%;
-      object-fit:cover;
-      border:2px solid #ccc;
-      display:none;
-    }
-
+    /* Mobile */
     @media (max-width:768px) {
       #sidebar {
         position:absolute;
@@ -185,37 +150,43 @@
         transition:left 0.3s;
         z-index:1000;
       }
-      #sidebar.show { left:0; }
-      #toggle-sidebar { display:inline-block; }
+      #sidebar.show {
+        left:0;
+      }
+      #toggle-sidebar {
+        position:absolute;
+        left:10px;
+        top:10px;
+        background:#fff;
+        border:1px solid #ccc;
+        padding:0.25rem 0.5rem;
+        cursor:pointer;
+        border-radius:4px;
+      }
     }
   </style>
 </head>
 <body>
   <header>
     Avezzano Plus
-    <button id="toggle-sidebar">☰</button>
+    <button id="toggle-sidebar" style="display:none;">☰</button>
   </header>
 
-  <!-- Registrazione -->
-  <div id="register-screen">
-    <h2>Registrati</h2>
-    <input id="nameInput" placeholder="Inserisci il tuo nome" maxlength="30">
-    <input type="file" id="picInput" accept="image/*">
-    <img id="preview">
-    <button id="registerBtn">Entra</button>
-  </div>
-
-  <!-- App -->
   <div id="app">
+    <!-- Sidebar -->
     <div id="sidebar">
       <h3>Chat</h3>
       <ul id="chat-list">
-        <li class="active" data-chat="public">Chat Pubblica</li>
+        <!-- Chat pubblica fissa -->
+        <li class="active" data-chat="public">
+          <img src="" alt=""><span>Chat Pubblica</span>
+        </li>
       </ul>
       <h3>Utenti online</h3>
       <div id="online-list"></div>
     </div>
 
+    <!-- Main -->
     <div id="main">
       <div id="chat-window"></div>
       <div id="input-bar">
@@ -226,11 +197,13 @@
   </div>
 
 <script>
+/* VARIABILI */
 let socket;
 let userData = JSON.parse(localStorage.getItem('userData') || 'null');
-let activeChat = "public";
+let activeChat = "public"; 
 let chats = { public: [] };
 
+/* UI */
 const chatWindow = document.getElementById('chat-window');
 const sendBtn = document.getElementById('sendBtn');
 const msgInput = document.getElementById('msg');
@@ -238,45 +211,6 @@ const chatList = document.getElementById('chat-list');
 const onlineList = document.getElementById('online-list');
 const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggle-sidebar');
-
-const registerScreen = document.getElementById('register-screen');
-const registerBtn = document.getElementById('registerBtn');
-const nameInput = document.getElementById('nameInput');
-const picInput = document.getElementById('picInput');
-const preview = document.getElementById('preview');
-const app = document.getElementById('app');
-
-/* Preview foto */
-picInput.addEventListener('change', () => {
-  const file = picInput.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = e => {
-      preview.src = e.target.result;
-      preview.style.display = "block";
-    };
-    reader.readAsDataURL(file);
-  }
-});
-
-/* Registrazione */
-registerBtn.addEventListener('click', () => {
-  const name = nameInput.value.trim();
-  if (!name) return alert("Inserisci un nome!");
-  const pic = preview.src || "";
-  userData = { name, profilePic: pic };
-  localStorage.setItem('userData', JSON.stringify(userData));
-  registerScreen.style.display = "none";
-  app.style.display = "flex";
-  startChat();
-});
-
-/* Se già registrato */
-if (userData) {
-  registerScreen.style.display = "none";
-  app.style.display = "flex";
-  startChat();
-}
 
 /* Mostra messaggi */
 function renderChat() {
@@ -311,12 +245,14 @@ function sendMessage() {
 sendBtn.addEventListener('click', sendMessage);
 msgInput.addEventListener('keydown', e => { if (e.key === "Enter") sendMessage(); });
 
-/* WebSocket */
+/* Connessione socket */
 function startChat() {
   socket = new WebSocket('wss://' + window.location.host);
+
   socket.addEventListener('open', () => {
     socket.send(JSON.stringify({ type: 'join', name: userData.name, profilePic: userData.profilePic }));
   });
+
   socket.addEventListener('message', ev => {
     let data;
     try { data = JSON.parse(ev.data); } catch(e){ return; }
@@ -327,7 +263,7 @@ function startChat() {
     } else if (data.type === "online") {
       onlineList.innerHTML = "";
       (data.users || []).forEach(u => {
-        if (u.name === userData.name) return;
+        if (u.name === userData.name) return; // non mostrare sé stesso
         const row = document.createElement('div');
         row.className = "user";
         row.innerHTML = `<img src="${u.profilePic}"><span>${u.name}</span>`;
@@ -338,23 +274,24 @@ function startChat() {
       if (!chats[data.from]) chats[data.from] = [];
       chats[data.from].push({ user: data.from, profilePic: data.profilePic, message: data.message });
       if (activeChat === data.from) renderChat();
-      ensureChatInList(data.from);
+      ensureChatInList(data.from, data.profilePic);
     }
   });
 }
 
-/* Chat private */
+/* Apri chat privata */
 function openPrivateChat(name, pic) {
-  activeChat = name;
   if (!chats[name]) chats[name] = [];
-  ensureChatInList(name);
+  ensureChatInList(name, pic);
   setActiveChat(name);
 }
-function ensureChatInList(name) {
+
+/* Gestione lista chat */
+function ensureChatInList(name, pic) {
   if (!chatList.querySelector(`[data-chat="${name}"]`)) {
     const li = document.createElement('li');
-    li.textContent = name;
     li.dataset.chat = name;
+    li.innerHTML = `<img src="${pic || ''}"><span>${name}</span>`;
     li.onclick = () => setActiveChat(name);
     chatList.appendChild(li);
   }
@@ -365,10 +302,17 @@ function setActiveChat(name) {
   renderChat();
 }
 
-/* Mobile sidebar */
-toggleSidebarBtn.addEventListener('click', () => {
-  sidebar.classList.toggle("show");
-});
+/* Mobile: toggle sidebar */
+if (window.innerWidth <= 768) {
+  toggleSidebarBtn.style.display = "inline-block";
+  toggleSidebarBtn.addEventListener('click', () => {
+    sidebar.classList.toggle("show");
+  });
+}
+
+/* START */
+if (userData) startChat();
+else alert("Prima completa la registrazione!");
 </script>
 </body>
 </html>
