@@ -11,7 +11,7 @@
       padding: 0;
       font-family: sans-serif;
       background: #f9f9f9;
-      overflow-x: hidden; /* niente scroll orizzontale */
+      overflow-x: hidden;
     }
 
     header {
@@ -20,17 +20,15 @@
       padding:1rem;
       text-align:center;
       flex-shrink: 0;
-      position: relative;
     }
 
-    /* Layout generale */
     #app {
       display: flex;
-      height: calc(100% - 64px); /* tolto header */
+      height: calc(100% - 64px);
       overflow: hidden;
     }
 
-    /* Sidebar (barra chat) */
+    /* Sidebar */
     #sidebar {
       background:#fff;
       border-right:1px solid #ccc;
@@ -50,31 +48,22 @@
       padding:0;
     }
     #chat-list li {
-      display:flex;
-      align-items:center;
-      gap:8px;
-      padding:0.6rem;
+      padding:0.75rem;
       border-bottom:1px solid #eee;
       cursor:pointer;
-    }
-    #chat-list li img {
-      width:28px; height:28px;
-      border-radius:50%;
-      object-fit:cover;
     }
     #chat-list li.active {
       background:#dbe8ff;
       font-weight:bold;
     }
 
-    /* Contenuto chat */
+    /* Chat content */
     #main {
       flex:1;
       display:flex;
       flex-direction:column;
       min-width: 0;
     }
-
     #chat-window {
       flex:1;
       overflow-y:auto;
@@ -94,7 +83,7 @@
       object-fit:cover;
     }
 
-    /* Input in basso */
+    /* Input */
     #input-bar {
       display:flex;
       border-top:1px solid #ccc;
@@ -118,7 +107,7 @@
       font-size:1rem;
     }
 
-    /* Lista utenti online */
+    /* Online users */
     #online-list {
       border-top:1px solid #ccc;
       max-height:150px;
@@ -177,10 +166,7 @@
     <div id="sidebar">
       <h3>Chat</h3>
       <ul id="chat-list">
-        <!-- Chat pubblica fissa -->
-        <li class="active" data-chat="public">
-          <img src="" alt=""><span>Chat Pubblica</span>
-        </li>
+        <li class="active" data-chat="public">Chat Pubblica</li>
       </ul>
       <h3>Utenti online</h3>
       <div id="online-list"></div>
@@ -200,7 +186,7 @@
 /* VARIABILI */
 let socket;
 let userData = JSON.parse(localStorage.getItem('userData') || 'null');
-let activeChat = "public"; 
+let activeChat = "public";
 let chats = { public: [] };
 
 /* UI */
@@ -212,7 +198,7 @@ const onlineList = document.getElementById('online-list');
 const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggle-sidebar');
 
-/* Mostra messaggi */
+/* Render messaggi */
 function renderChat() {
   chatWindow.innerHTML = "";
   (chats[activeChat] || []).forEach(m => {
@@ -233,6 +219,7 @@ function renderChat() {
 function sendMessage() {
   const text = msgInput.value.trim();
   if (!text || !socket || socket.readyState !== WebSocket.OPEN) return;
+
   if (activeChat === "public") {
     socket.send(JSON.stringify({ type: "chat", message: text }));
   } else {
@@ -245,7 +232,7 @@ function sendMessage() {
 sendBtn.addEventListener('click', sendMessage);
 msgInput.addEventListener('keydown', e => { if (e.key === "Enter") sendMessage(); });
 
-/* Connessione socket */
+/* Connessione */
 function startChat() {
   socket = new WebSocket('wss://' + window.location.host);
 
@@ -263,7 +250,6 @@ function startChat() {
     } else if (data.type === "online") {
       onlineList.innerHTML = "";
       (data.users || []).forEach(u => {
-        if (u.name === userData.name) return; // non mostrare sé stesso
         const row = document.createElement('div');
         row.className = "user";
         row.innerHTML = `<img src="${u.profilePic}"><span>${u.name}</span>`;
@@ -274,24 +260,25 @@ function startChat() {
       if (!chats[data.from]) chats[data.from] = [];
       chats[data.from].push({ user: data.from, profilePic: data.profilePic, message: data.message });
       if (activeChat === data.from) renderChat();
-      ensureChatInList(data.from, data.profilePic);
+      ensureChatInList(data.from);
     }
   });
 }
 
 /* Apri chat privata */
 function openPrivateChat(name, pic) {
+  activeChat = name;
   if (!chats[name]) chats[name] = [];
-  ensureChatInList(name, pic);
+  ensureChatInList(name);
   setActiveChat(name);
 }
 
 /* Gestione lista chat */
-function ensureChatInList(name, pic) {
+function ensureChatInList(name) {
   if (!chatList.querySelector(`[data-chat="${name}"]`)) {
     const li = document.createElement('li');
+    li.textContent = name;
     li.dataset.chat = name;
-    li.innerHTML = `<img src="${pic || ''}"><span>${name}</span>`;
     li.onclick = () => setActiveChat(name);
     chatList.appendChild(li);
   }
@@ -302,7 +289,10 @@ function setActiveChat(name) {
   renderChat();
 }
 
-/* Mobile: toggle sidebar */
+/* Torna sempre possibile alla chat pubblica */
+chatList.querySelector('[data-chat="public"]').onclick = () => setActiveChat("public");
+
+/* Mobile */
 if (window.innerWidth <= 768) {
   toggleSidebarBtn.style.display = "inline-block";
   toggleSidebarBtn.addEventListener('click', () => {
@@ -316,3 +306,4 @@ else alert("Prima completa la registrazione!");
 </script>
 </body>
 </html>
+
