@@ -183,13 +183,11 @@
   </div>
 
 <script>
-/* VARIABILI */
 let socket;
 let userData = JSON.parse(localStorage.getItem('userData') || 'null');
 let activeChat = "public";
 let chats = { public: [] };
 
-/* UI */
 const chatWindow = document.getElementById('chat-window');
 const sendBtn = document.getElementById('sendBtn');
 const msgInput = document.getElementById('msg');
@@ -198,7 +196,7 @@ const onlineList = document.getElementById('online-list');
 const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggle-sidebar');
 
-/* Render messaggi */
+/* Mostra messaggi */
 function renderChat() {
   chatWindow.innerHTML = "";
   (chats[activeChat] || []).forEach(m => {
@@ -215,7 +213,7 @@ function renderChat() {
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-/* Invia messaggi */
+/* Invia messaggio */
 function sendMessage() {
   const text = msgInput.value.trim();
   if (!text || !socket || socket.readyState !== WebSocket.OPEN) return;
@@ -224,7 +222,9 @@ function sendMessage() {
     socket.send(JSON.stringify({ type: "chat", message: text }));
   } else {
     socket.send(JSON.stringify({ type: "private", to: activeChat, message: text }));
-    chats[activeChat].push({ user: "Me", profilePic: userData.profilePic, message: text });
+    // ✅ Non creare o aggiornare "me", ma solo la chat dell’altro utente
+    if (!chats[activeChat]) chats[activeChat] = [];
+    chats[activeChat].push({ user: userData.name, profilePic: userData.profilePic, message: text });
     renderChat();
   }
   msgInput.value = "";
@@ -232,7 +232,7 @@ function sendMessage() {
 sendBtn.addEventListener('click', sendMessage);
 msgInput.addEventListener('keydown', e => { if (e.key === "Enter") sendMessage(); });
 
-/* Connessione */
+/* Connessione WebSocket */
 function startChat() {
   socket = new WebSocket('wss://' + window.location.host);
 
@@ -247,26 +247,31 @@ function startChat() {
     if (data.type === "chat") {
       chats.public.push({ user: data.user, profilePic: data.profilePic, message: data.message });
       if (activeChat === "public") renderChat();
+
     } else if (data.type === "online") {
       onlineList.innerHTML = "";
       (data.users || []).forEach(u => {
+        if (u.name === userData.name) return; // ✅ non mostrare sé stessi
         const row = document.createElement('div');
         row.className = "user";
         row.innerHTML = `<img src="${u.profilePic}"><span>${u.name}</span>`;
         row.onclick = () => openPrivateChat(u.name, u.profilePic);
         onlineList.appendChild(row);
       });
+
     } else if (data.type === "private") {
+      if (data.from === userData.name) return; // ✅ ignora messaggi riflessi a se stessi
       if (!chats[data.from]) chats[data.from] = [];
       chats[data.from].push({ user: data.from, profilePic: data.profilePic, message: data.message });
-      if (activeChat === data.from) renderChat();
       ensureChatInList(data.from);
+      if (activeChat === data.from) renderChat();
     }
   });
 }
 
 /* Apri chat privata */
 function openPrivateChat(name, pic) {
+  if (name === userData.name) return;
   activeChat = name;
   if (!chats[name]) chats[name] = [];
   ensureChatInList(name);
@@ -275,6 +280,7 @@ function openPrivateChat(name, pic) {
 
 /* Gestione lista chat */
 function ensureChatInList(name) {
+  if (name === "me") return; // ✅ prevenzione diretta
   if (!chatList.querySelector(`[data-chat="${name}"]`)) {
     const li = document.createElement('li');
     li.textContent = name;
@@ -283,13 +289,14 @@ function ensureChatInList(name) {
     chatList.appendChild(li);
   }
 }
+
 function setActiveChat(name) {
   activeChat = name;
   [...chatList.children].forEach(li => li.classList.toggle("active", li.dataset.chat === name));
   renderChat();
 }
 
-/* Torna sempre possibile alla chat pubblica */
+/* Torna alla chat pubblica */
 chatList.querySelector('[data-chat="public"]').onclick = () => setActiveChat("public");
 
 /* Mobile */
@@ -300,10 +307,9 @@ if (window.innerWidth <= 768) {
   });
 }
 
-/* START */
+/* Start */
 if (userData) startChat();
 else alert("Prima completa la registrazione!");
 </script>
 </body>
 </html>
-
