@@ -1,148 +1,329 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
   <title>Avezzano Plus</title>
   <style>
-    body { margin:0; font-family:sans-serif; display:flex; height:100vh; overflow:hidden; }
-    #sidebar { width:220px; background:#1e3a8a; color:white; display:flex; flex-direction:column; }
-    #chatList { flex:1; overflow-y:auto; }
-    .chatItem { padding:10px; cursor:pointer; border-bottom:1px solid #334; }
-    .chatItem:hover { background:#3b5998; }
-    #main { flex:1; display:flex; flex-direction:column; }
-    #messages { flex:1; padding:10px; overflow-y:auto; background:#f0f4ff; }
-    .msg { margin:5px 0; display:flex; align-items:center; }
-    .msg img { width:32px; height:32px; border-radius:50%; margin-right:8px; }
-    #inputBar { display:flex; }
-    #inputBar input { flex:1; padding:10px; border:none; }
-    #inputBar button { padding:10px; background:#1e3a8a; color:white; border:none; }
-    #overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:white; display:flex; justify-content:center; align-items:center; }
-    #register { background:#f0f4ff; padding:20px; border-radius:12px; text-align:center; }
-    #profilePics img { width:50px; height:50px; border-radius:50%; margin:5px; cursor:pointer; border:2px solid transparent; }
-    #profilePics img.selected { border-color:#1e3a8a; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: sans-serif;
+      background: #f9f9f9;
+      overflow: hidden;
+    }
+
+    header {
+      background:#007bff;
+      color:#fff;
+      padding:1rem;
+      text-align:center;
+      position: relative;
+    }
+
+    #toggle-sidebar {
+      position:absolute;
+      left:10px;
+      top:10px;
+      background:#fff;
+      border:1px solid #ccc;
+      padding:0.25rem 0.5rem;
+      cursor:pointer;
+      border-radius:4px;
+      display:none;
+    }
+
+    /* App wrapper: nascosto fino a registrazione */
+    #app { display: none; height: calc(100% - 64px); }
+
+    /* Sidebar */
+    #sidebar {
+      width:220px;
+      background:#fff;
+      border-right:1px solid #ccc;
+      overflow-y:auto;
+      flex-shrink:0;
+      display:flex;
+      flex-direction:column;
+    }
+    #sidebar h3 { margin:0; padding:0.75rem; background:#eef5ff; border-bottom:1px solid #ccc; }
+    #chat-list { list-style:none; margin:0; padding:0; }
+    #chat-list li { display:flex; align-items:center; gap:8px; padding:0.6rem; border-bottom:1px solid #eee; cursor:pointer; }
+    #chat-list li img { width:28px; height:28px; border-radius:50%; object-fit:cover; }
+    #chat-list li.active { background:#dbe8ff; font-weight:600; }
+
+    /* Main area */
+    #main { display:flex; flex-direction:column; height: calc(100% - 0px); }
+    #chat-window { flex:1; overflow-y:auto; padding:1rem; background:#fff; }
+    .msg { display:flex; align-items:center; gap:8px; margin-bottom:8px; word-wrap:break-word; }
+    .msg img { width:32px; height:32px; border-radius:50%; object-fit:cover; }
+
+    /* Composer */
+    #input-bar { display:flex; border-top:1px solid #ccc; background:#f1f1f1; padding:0.5rem; }
+    #input-bar input { flex:1; padding:0.5rem; border:1px solid #ccc; border-radius:4px; font-size:1rem; }
+    #input-bar button { margin-left:0.5rem; padding:0.5rem 1rem; border:none; background:#007bff; color:#fff; border-radius:4px; font-size:1rem; cursor:pointer; }
+
+    /* Online list */
+    #online-list { border-top:1px solid #ccc; max-height:150px; overflow-y:auto; background:#fafafa; }
+    .user { display:flex; align-items:center; gap:8px; padding:0.5rem; border-bottom:1px solid #eee; cursor:pointer; }
+    .user img { width:28px; height:28px; border-radius:50%; object-fit:cover; }
+
+    /* Registration screen */
+    #register-screen {
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      height: calc(100% - 64px); background:#fff; gap:1rem;
+    }
+    #register-screen input[type="text"] { padding:0.5rem; font-size:1rem; border:1px solid #ccc; border-radius:4px; width:80%; max-width:320px; }
+    #register-screen input[type="file"] { width:80%; max-width:320px; }
+    #register-screen button { padding:0.6rem 1rem; border:none; background:#007bff; color:#fff; border-radius:6px; cursor:pointer; }
+    #preview { width:80px; height:80px; border-radius:50%; object-fit:cover; border:2px solid #ddd; display:none; }
+
+    /* Responsive: sidebar slide-in */
+    @media (max-width:768px) {
+      #sidebar {
+        position:absolute; left:-240px; top:64px; bottom:0; width:220px; transition:left .25s; z-index:1000;
+      }
+      #sidebar.show { left:0; }
+      #toggle-sidebar { display:inline-block; }
+      /* layout: app is flex row on large screens, but on mobile main should fill */
+      #app { display:flex; }
+      .layout-row { display:flex; height:100%; width:100%; }
+    }
   </style>
 </head>
 <body>
-  <div id="sidebar">
-    <h3 style="text-align:center;">Chat</h3>
-    <div id="chatList"></div>
-  </div>
-  <div id="main">
-    <div id="messages"></div>
-    <div id="inputBar">
-      <input id="msgInput" placeholder="Scrivi un messaggio..." />
-      <button id="sendBtn">Invia</button>
-    </div>
+  <header>
+    Avezzano Plus
+    <button id="toggle-sidebar">☰</button>
+  </header>
+
+  <!-- Registrazione (in-page) -->
+  <div id="register-screen">
+    <h2>Registrati</h2>
+    <input id="nameInput" type="text" placeholder="Nome e Cognome" maxlength="80" />
+    <input id="picInput" type="file" accept="image/*" />
+    <img id="preview" alt="Anteprima">
+    <button id="registerBtn">Entra</button>
+    <p class="small" style="color:#666; font-size:.9rem;">Scegli il tuo nome reale e una foto profilo.</p>
   </div>
 
-  <div id="overlay">
-    <div id="register">
-      <h2>Registrati</h2>
-      <input id="nameInput" placeholder="Il tuo nome"><br><br>
-      <div id="profilePics">
-        <img src="https://i.pravatar.cc/100?img=1">
-        <img src="https://i.pravatar.cc/100?img=2">
-        <img src="https://i.pravatar.cc/100?img=3">
+  <!-- App (nascosto finché non registrato) -->
+  <div id="app" class="layout-row" style="display:none;">
+    <div id="sidebar">
+      <h3>Chat</h3>
+      <ul id="chat-list">
+        <!-- voce fissa chat pubblica -->
+        <li data-chat="public" class="active"><img id="pub-avatar" src="" alt=""><span>Chat Pubblica</span></li>
+      </ul>
+      <h3>Utenti online</h3>
+      <div id="online-list"></div>
+    </div>
+
+    <div id="main">
+      <div id="chat-window" aria-live="polite"></div>
+      <div id="input-bar">
+        <input id="msg" placeholder="Scrivi un messaggio..." maxlength="240" />
+        <button id="sendBtn">Invia</button>
       </div>
-      <br>
-      <button id="joinBtn">Entra</button>
     </div>
   </div>
 
-  <script>
-    const ws = new WebSocket(location.origin.replace(/^http/, 'ws'));
-    let userData = null;
-    let chats = { "Pubblica": [] };
-    let activeChat = "Pubblica";
+<script>
+/* --- costanti / stato --- */
+const DEFAULT_AVATAR = 'https://via.placeholder.com/64?text=+';
+let socket = null;
+let userData = JSON.parse(localStorage.getItem('userData') || 'null'); // { name, profilePic }
+let activeChat = 'public'; // 'public' or username
+let chats = { public: [] };
 
-    const chatList = document.getElementById("chatList");
-    const messagesDiv = document.getElementById("messages");
-    const msgInput = document.getElementById("msgInput");
-    const sendBtn = document.getElementById("sendBtn");
+/* --- elementi --- */
+const registerScreen = document.getElementById('register-screen');
+const nameInput = document.getElementById('nameInput');
+const picInput = document.getElementById('picInput');
+const preview = document.getElementById('preview');
+const registerBtn = document.getElementById('registerBtn');
 
-    function renderChatList() {
-      chatList.innerHTML = "";
-      for (const key in chats) {
-        const div = document.createElement("div");
-        div.className = "chatItem";
-        div.textContent = key;
-        if (key === activeChat) div.style.background="#3b82f6";
-        div.onclick = () => { activeChat = key; renderChat(); renderChatList(); };
-        chatList.appendChild(div);
-      }
+const app = document.getElementById('app');
+const chatList = document.getElementById('chat-list');
+const pubAvatar = document.getElementById('pub-avatar');
+const onlineList = document.getElementById('online-list');
+const chatWindow = document.getElementById('chat-window');
+const msgInput = document.getElementById('msg');
+const sendBtn = document.getElementById('sendBtn');
+const toggleSidebarBtn = document.getElementById('toggle-sidebar');
+const sidebar = document.getElementById('sidebar');
+
+/* --- preview immagine --- */
+picInput.addEventListener('change', () => {
+  const f = picInput.files[0];
+  if (!f) { preview.style.display='none'; preview.src=''; return; }
+  const r = new FileReader();
+  r.onload = e => { preview.src = e.target.result; preview.style.display = 'block'; };
+  r.readAsDataURL(f);
+});
+
+/* --- registrazione in-page --- */
+registerBtn.addEventListener('click', () => {
+  const name = (nameInput.value || '').trim();
+  if (!/^[A-Za-zÀ-Ýà-ÿ\s]+$/.test(name) || name.split(/\s+/).length < 2) {
+    return alert('Inserisci nome e cognome validi (senza numeri o simboli).');
+  }
+  const profilePic = preview.src || '';
+  userData = { name: name.replace(/\s+/g,' '), profilePic };
+  localStorage.setItem('userData', JSON.stringify(userData));
+  // mostra app e avvia WS
+  registerScreen.style.display = 'none';
+  app.style.display = 'flex';
+  startChat();
+});
+
+/* --- se già registrato --> avvia subito --- */
+if (userData && userData.name) {
+  // mostra anteprima avatar pubblica
+  pubAvatar.src = userData.profilePic || DEFAULT_AVATAR;
+  registerScreen.style.display = 'none';
+  app.style.display = 'flex';
+  startChat();
+}
+
+/* --- helper UI --- */
+function ensureChatInList(name, pic) {
+  // non creare entry se è 'public'
+  if (name === 'public') return;
+  if (chatList.querySelector(`[data-chat="${CSS.escape(name)}"]`)) return;
+  const li = document.createElement('li');
+  li.dataset.chat = name;
+  li.innerHTML = `<img src="${pic || DEFAULT_AVATAR}"><span>${name}</span>`;
+  li.addEventListener('click', () => setActiveChat(name));
+  chatList.appendChild(li);
+}
+function setActiveChat(name) {
+  activeChat = name;
+  // evidenzia
+  [...chatList.children].forEach(li => li.classList.toggle('active', li.dataset.chat === name || (name==='public' && !li.dataset.chat)));
+  // render
+  renderChat();
+  // su mobile richiudi sidebar
+  if (window.innerWidth <= 768) sidebar.classList.remove('show');
+}
+function renderChat() {
+  chatWindow.innerHTML = '';
+  const list = chats[activeChat] || [];
+  for (const m of list) {
+    const div = document.createElement('div');
+    div.className = 'msg';
+    const img = document.createElement('img');
+    img.src = m.profilePic || DEFAULT_AVATAR;
+    const span = document.createElement('span');
+    span.innerHTML = `<strong>${escapeHtml(m.user)}:</strong>&nbsp;${escapeHtml(m.message)}`;
+    div.appendChild(img);
+    div.appendChild(span);
+    chatWindow.appendChild(div);
+  }
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]); }
+
+/* --- invio messaggi --- */
+sendBtn.addEventListener('click', sendMessage);
+msgInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') sendMessage(); });
+
+function sendMessage(){
+  const text = (msgInput.value || '').trim();
+  if (!text || !socket || socket.readyState !== WebSocket.OPEN) return;
+  if (activeChat === 'public') {
+    socket.send(JSON.stringify({ type:'chat', message: text }));
+    // non appendo localmente: server reinvierà la chat a tutti
+  } else {
+    // invio privato verso 'activeChat'
+    socket.send(JSON.stringify({ type:'private', to: activeChat, message: text }));
+    // non appendo localmente: arriverà dal server con from = our name e to = recipient
+  }
+  msgInput.value = '';
+}
+
+/* --- WebSocket e gestione messaggi --- */
+function startChat(){
+  // aggiorna avatar pubblica
+  pubAvatar.src = userData.profilePic || DEFAULT_AVATAR;
+
+  socket = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host);
+
+  socket.addEventListener('open', () => {
+    socket.send(JSON.stringify({ type:'join', name: userData.name, profilePic: userData.profilePic }));
+    // assicurati che la chat pubblica esista
+    if (!chats.public) chats.public = [];
+    setActiveChat('public');
+  });
+
+  socket.addEventListener('message', (ev) => {
+    let data;
+    try { data = JSON.parse(ev.data); } catch(e){ return; }
+
+    if (data.type === 'chat') {
+      // messaggio pubblico
+      if (!chats.public) chats.public = [];
+      chats.public.push({ user: data.user || 'Utente', profilePic: data.profilePic || DEFAULT_AVATAR, message: data.message || '' });
+      if (activeChat === 'public') renderChat();
     }
 
-    function renderChat() {
-      messagesDiv.innerHTML = "";
-      for (const m of chats[activeChat]) {
-        const div = document.createElement("div");
-        div.className = "msg";
-        div.innerHTML = `<img src="${m.profilePic}"><b>${m.user}:</b> ${m.message}`;
-        messagesDiv.appendChild(div);
-      }
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    else if (data.type === 'private') {
+      // data: { from, to, profilePic, message }
+      // chiave conversazione: se il mittente è me -> usare data.to (destinatario),
+      // altrimenti usare data.from (mittente).
+      const sender = data.from;
+      const recipient = data.to;
+      const chatKey = (sender === userData.name) ? recipient : sender;
+      if (!chatKey) return; // sicurezza
+      if (!chats[chatKey]) chats[chatKey] = [];
+      // displayName: mostra "Me" se il mittente era io, altrimenti mostra il nome reale
+      const displayName = (sender === userData.name) ? 'Me' : sender;
+      const picToShow = data.profilePic || (sender === userData.name ? userData.profilePic : DEFAULT_AVATAR);
+      chats[chatKey].push({ user: displayName, profilePic: picToShow, message: data.message || '' });
+      // se la chat non esiste nella sidebar, aggiungila (usa il nome reale come label)
+      ensureChatInList(chatKey, (sender === userData.name) ? DEFAULT_AVATAR : data.profilePic);
+      // se la chat attiva è quella corretta, renderizza
+      if (activeChat === chatKey) renderChat();
     }
 
-    function ensureChatInList(name) {
-      if (!chats[name]) chats[name] = [];
-      renderChatList();
+    else if (data.type === 'online') {
+      // aggiorna lista utenti online (click per aprire chat privata)
+      onlineList.innerHTML = '';
+      (data.users || []).forEach(u=>{
+        if (u.name === userData.name) return;
+        const row = document.createElement('div');
+        row.className = 'user';
+        row.innerHTML = `<img src="${u.profilePic || DEFAULT_AVATAR}"><span>${escapeHtml(u.name)}</span>`;
+        row.addEventListener('click', () => {
+          // apri chat privata con questo utente
+          ensureChatInList(u.name, u.profilePic);
+          setActiveChat(u.name);
+        });
+        onlineList.appendChild(row);
+      });
     }
+  });
 
-    sendBtn.onclick = () => {
-      const txt = msgInput.value.trim();
-      if (!txt) return;
-      if (activeChat === "Pubblica") {
-        ws.send(JSON.stringify({ type:"chat", message:txt }));
-      } else {
-        ws.send(JSON.stringify({ type:"private", to:activeChat, message:txt }));
-      }
-      msgInput.value="";
-    };
+  socket.addEventListener('close', ()=>console.warn('WS chiuso'));
+  socket.addEventListener('error', (e)=>console.error('WS err', e));
+}
 
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+/* Sidebar mobile toggle */
+toggleSidebarBtn.addEventListener('click', ()=>sidebar.classList.toggle('show'));
+if (window.innerWidth <= 768) toggleSidebarBtn.style.display = 'inline-block';
 
-      if (data.type === "chat") {
-        chats["Pubblica"].push({ user:data.user, profilePic:data.profilePic, message:data.message });
-        if (activeChat==="Pubblica") renderChat();
-      }
+/* Se la pagina carica e sei già registrato, show app (startChat già chiamato sopra) */
+if (userData && userData.name) {
+  // app già mostrato all'inizio di startChat; se startChat non chiamato prima, fosse il caso:
+  // (ma startChat viene chiamato all'inizializzazione sopra quando userData esiste)
+}
 
-      else if (data.type === "private") {
-        const sender = data.from;
-        const chatKey = (sender === userData.name) ? data.to : sender;
-        const displayName = (sender === userData.name) ? "Me" : sender;
+/* Assicura che la chat pubblica sia sempre cliccabile */
+const publicLi = chatList.querySelector('[data-chat="public"]');
+if (publicLi) publicLi.addEventListener('click', () => setActiveChat('public'));
 
-        if (!chats[chatKey]) chats[chatKey] = [];
-        chats[chatKey].push({ user:displayName, profilePic:data.profilePic, message:data.message });
-        if (activeChat === chatKey) renderChat();
-        ensureChatInList(chatKey);
-      }
-
-      else if (data.type === "online") {
-        console.log("Utenti online:", data.users);
-      }
-    };
-
-    // Registrazione
-    let selectedPic="";
-    document.querySelectorAll("#profilePics img").forEach(img=>{
-      img.onclick=()=>{
-        document.querySelectorAll("#profilePics img").forEach(i=>i.classList.remove("selected"));
-        img.classList.add("selected");
-        selectedPic = img.src;
-      };
-    });
-
-    document.getElementById("joinBtn").onclick = () => {
-      const name=document.getElementById("nameInput").value.trim();
-      if (!name || !selectedPic) return alert("Inserisci nome e seleziona immagine");
-      userData={ name, profilePic:selectedPic };
-      ws.send(JSON.stringify({ type:"register", ...userData }));
-      document.getElementById("overlay").style.display="none";
-      renderChatList();
-      renderChat();
-    };
-  </script>
+/* --- fine script --- */
+</script>
 </body>
 </html>
-
