@@ -205,7 +205,7 @@ function renderChat() {
     const img = document.createElement('img');
     img.src = m.profilePic || '';
     const span = document.createElement('span');
-    span.textContent = m.user + ": " + m.message;
+    span.textContent = m.user ? `${m.user}: ${m.message}` : m.message;
     div.appendChild(img);
     div.appendChild(span);
     chatWindow.appendChild(div);
@@ -222,7 +222,6 @@ function sendMessage() {
     socket.send(JSON.stringify({ type: "chat", message: text }));
   } else {
     socket.send(JSON.stringify({ type: "private", to: activeChat, message: text }));
-    // ✅ Non creare o aggiornare "me", ma solo la chat dell’altro utente
     if (!chats[activeChat]) chats[activeChat] = [];
     chats[activeChat].push({ user: userData.name, profilePic: userData.profilePic, message: text });
     renderChat();
@@ -248,10 +247,19 @@ function startChat() {
       chats.public.push({ user: data.user, profilePic: data.profilePic, message: data.message });
       if (activeChat === "public") renderChat();
 
+    } else if (data.type === "chatHistory") {
+      // ✅ cronologia ricevuta dal server
+      chats[data.chat] = (data.messages || []).map(m => ({
+        user: m.user || m.from,
+        profilePic: m.profilePic,
+        message: m.message
+      }));
+      if (activeChat === data.chat) renderChat();
+
     } else if (data.type === "online") {
       onlineList.innerHTML = "";
       (data.users || []).forEach(u => {
-        if (u.name === userData.name) return; // ✅ non mostrare sé stessi
+        if (u.name === userData.name) return;
         const row = document.createElement('div');
         row.className = "user";
         row.innerHTML = `<img src="${u.profilePic}"><span>${u.name}</span>`;
@@ -260,7 +268,7 @@ function startChat() {
       });
 
     } else if (data.type === "private") {
-      if (data.from === userData.name) return; // ✅ ignora messaggi riflessi a se stessi
+      if (data.from === userData.name) return;
       if (!chats[data.from]) chats[data.from] = [];
       chats[data.from].push({ user: data.from, profilePic: data.profilePic, message: data.message });
       ensureChatInList(data.from);
@@ -276,11 +284,12 @@ function openPrivateChat(name, pic) {
   if (!chats[name]) chats[name] = [];
   ensureChatInList(name);
   setActiveChat(name);
+  socket.send(JSON.stringify({ type: "loadPrivateChat", with: name }));
 }
 
 /* Gestione lista chat */
 function ensureChatInList(name) {
-  if (name === "me") return; // ✅ prevenzione diretta
+  if (name === "me") return;
   if (!chatList.querySelector(`[data-chat="${name}"]`)) {
     const li = document.createElement('li');
     li.textContent = name;
