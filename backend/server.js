@@ -83,10 +83,9 @@ wss.on('connection', (ws) => {
       clients.set(ws, { name: data.name || 'Utente', profilePic: data.profilePic || '' });
       console.log('Registrato utente:', clients.get(ws).name);
 
-      // Invia la chat pubblica (solo ultimi 7 giorni)
+      // Invia la chat pubblica
       cleanOldPublicMessages();
       send(ws, { type: 'chatHistory', chat: 'public', messages: chats.public });
-
       broadcastOnline();
       return;
     }
@@ -105,7 +104,6 @@ wss.on('connection', (ws) => {
       chats.public.push(message);
       cleanOldPublicMessages();
       saveChats();
-
       broadcast({ type: 'chat', ...message });
       return;
     }
@@ -118,6 +116,7 @@ wss.on('connection', (ws) => {
 
       const key = privateKey(sender.name, targetName);
       if (!chats.private[key]) chats.private[key] = [];
+
       const message = {
         from: sender.name,
         to: targetName,
@@ -128,14 +127,14 @@ wss.on('connection', (ws) => {
       chats.private[key].push(message);
       saveChats();
 
-      // Invia a destinatario (se online)
+      // ✅ Invia a destinatario solo se online
       for (const [client, info] of clients.entries()) {
         if (info.name === targetName && client.readyState === WebSocket.OPEN) {
           send(client, { type: 'private', ...message });
         }
       }
 
-      // Rimanda anche al mittente
+      // ✅ Sempre rimanda al mittente (anche se l’altro è offline)
       send(ws, { type: 'private', ...message });
       return;
     }
@@ -144,8 +143,11 @@ wss.on('connection', (ws) => {
     if (data.type === 'loadPrivateChat') {
       const user = clients.get(ws);
       if (!user || !user.name) return;
+
       const key = privateKey(user.name, data.with);
       const history = chats.private[key] || [];
+
+      // ✅ anche se l’altro utente è offline, restituisci la chat
       send(ws, { type: 'chatHistory', chat: data.with, messages: history });
       return;
     }
