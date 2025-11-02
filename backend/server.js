@@ -1,11 +1,11 @@
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const app = express();
 const http = require('http');
 const server = http.createServer(app);
 const WebSocket = require('ws');
 const wss = new WebSocket.Server({ server });
-const fs = require('fs');
-const path = require('path');
 
 app.use(express.static('public'));
 
@@ -14,121 +14,139 @@ server.listen(PORT, () => {
   console.log(`WebSocket server in ascolto sulla porta ${PORT}`);
 });
 
-/* === Gestione dati persistenti === */
-const DATA_DIR = path.join(__dirname, 'chat_data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
+const clients = new Map(); // ws => { name, profilePic }
+const CHAT_FILE = path.join(__dirname, 'chats.json');
 
-function loadChatFile(filename) {
+// =====================
+// FUNZIONI DI SUPPORTO
+// =====================
+
+function loadChats() {
   try {
-    return JSON.parse(fs.readFileSync(path.join(DATA_DIR, filename), 'utf8'));
-  } catch {
-    return [];
+    const data = fs.readFileSync(CHAT_FILE, 'utf8');
+    return JSON.parse(data);
+  } catch (err) {
+    return { public: [], private: {} };
   }
 }
 
-function saveChatFile(filename, data) {
-  fs.writeFileSync(path.join(DATA_DIR, filename), JSON.stringify(data, null, 2));
+function saveChats() {
+  fs.writeFileSync(CHAT_FILE, JSON.stringify(chats, null, 2));
 }
 
-/* === Carica chat pubblica (solo ultimi 7 giorni) === */
-let publicChat = loadChatFile('public.json').filter(msg => {
-  return Date.now() - msg.timestamp < 7 * 24 * 60 * 60 * 1000;
-});
-saveChatFile('public.json', publicChat);
+function cleanOldPublicMessages() {
+  const now = Date.now();
+  const week = 7 * 24 * 60 * 60 * 1000;
+  chats.public = chats.public.filter(m => now - m.timestamp < week);
+  saveChats();
+}
 
-/* === Mappa client === */
-const clients = new Map(); // ws => { name, profilePic }
+function privateKey(userA, userB) {
+  return [userA, userB].sort().join('_');
+}
 
-/* === Helper === */
+function send(ws, msg) {
+  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+}
+
 function broadcast(msg) {
   const json = JSON.stringify(msg);
   for (const client of wss.clients) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(json);
-    }
+    if (client.readyState === WebSocket.OPEN) client.send(json);
   }
 }
 
 function broadcastOnline() {
   const users = Array.from(clients.values()).map(u => ({ name: u.name, profilePic: u.profilePic }));
-  broadcast({ type: 'online', users });
+  broadcast({ type: 'online', count: users.length, users });
 }
 
-/* === Gestione WebSocket === */
+// =====================
+// CHAT IN MEMORIA
+// =====================
+let chats = loadChats();
+cleanOldPublicMessages();
+
+// =====================
+// EVENTI WEBSOCKET
+// =====================
 wss.on('connection', (ws) => {
   console.log('Nuovo client connesso');
   clients.set(ws, { name: null, profilePic: null });
 
   ws.on('message', (msg) => {
     let data;
-    try { data = JSON.parse(msg); } catch { return; }
+    try { data = JSON.parse(msg); } catch (e) { return; }
 
-    /* Registrazione utente */
-    if (data.type === 'join') {
-      clients.set(ws, { name: data.name, profilePic: data.profilePic });
-      console.log('Registrato utente:', data.name);
+    // ===== REGISTRAZIONE =====
+    if (data.type === 'join' || data.type === 'register') {
+      clients.set(ws, { name: data.name || 'Utente', profilePic: data.profilePic || '' });
+      console.log('Registrato utente:', clients.get(ws).name);
+
+      // Invia la chat pubblica (solo ultimi 7 giorni)
+      cleanOldPublicMessages();
+      send(ws, { type: 'chatHistory', chat: 'public', messages: chats.public });
+
       broadcastOnline();
-
-      // Invia chat pubblica
-      ws.send(JSON.stringify({ type: 'chat_history', chat: 'public', messages: publicChat }));
-
-      // Invia chat private salvate
-      const privateDir = path.join(DATA_DIR, 'private');
-      if (!fs.existsSync(privateDir)) fs.mkdirSync(privateDir);
-      fs.readdirSync(privateDir).forEach(file => {
-        if (file.includes(data.name)) {
-          const msgs = loadChatFile(path.join('private', file));
-          ws.send(JSON.stringify({ type: 'chat_history', chat: file.replace('.json', ''), messages: msgs }));
-        }
-      });
       return;
     }
 
-    /* Messaggio pubblico */
+    // ===== MESSAGGIO PUBBLICO =====
     if (data.type === 'chat') {
-      const sender = clients.get(ws);
-      if (!sender || !sender.name) return;
-      const msgData = {
-        user: sender.name,
-        profilePic: sender.profilePic,
-        message: data.message,
+      const info = clients.get(ws);
+      if (!info || !info.name) return;
+
+      const message = {
+        user: info.name,
+        profilePic: info.profilePic,
+        message: data.message || '',
         timestamp: Date.now()
       };
-      publicChat.push(msgData);
-      saveChatFile('public.json', publicChat);
-      broadcast({ type: 'chat', ...msgData });
+      chats.public.push(message);
+      cleanOldPublicMessages();
+      saveChats();
+
+      broadcast({ type: 'chat', ...message });
       return;
     }
 
-    /* Messaggio privato */
+    // ===== MESSAGGIO PRIVATO =====
     if (data.type === 'private') {
       const sender = clients.get(ws);
       if (!sender || !sender.name) return;
       const targetName = data.to;
-      const chatId = [sender.name, targetName].sort().join('_');
-      const filename = path.join('private', chatId + '.json');
-      const filepath = path.join(DATA_DIR, filename);
-      const msgs = loadChatFile(filename);
 
-      const msgData = {
+      const key = privateKey(sender.name, targetName);
+      if (!chats.private[key]) chats.private[key] = [];
+      const message = {
         from: sender.name,
         to: targetName,
         profilePic: sender.profilePic,
-        message: data.message,
+        message: data.message || '',
         timestamp: Date.now()
       };
-      msgs.push(msgData);
-      saveChatFile(filename, msgs);
+      chats.private[key].push(message);
+      saveChats();
 
-      // Invia al destinatario se online
+      // Invia a destinatario (se online)
       for (const [client, info] of clients.entries()) {
         if (info.name === targetName && client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ type: 'private', ...msgData }));
+          send(client, { type: 'private', ...message });
         }
       }
 
-      // Invia al mittente per aggiornare la chat
-      ws.send(JSON.stringify({ type: 'private', ...msgData }));
+      // Rimanda anche al mittente
+      send(ws, { type: 'private', ...message });
+      return;
+    }
+
+    // ===== RICHIESTA CRONOLOGIA PRIVATA =====
+    if (data.type === 'loadPrivateChat') {
+      const user = clients.get(ws);
+      if (!user || !user.name) return;
+      const key = privateKey(user.name, data.with);
+      const history = chats.private[key] || [];
+      send(ws, { type: 'chatHistory', chat: data.with, messages: history });
       return;
     }
   });
@@ -136,7 +154,6 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     clients.delete(ws);
     broadcastOnline();
-    console.log('Client disconnesso');
+    console.log('Client disconnesso, utenti online:', clients.size);
   });
 });
-
