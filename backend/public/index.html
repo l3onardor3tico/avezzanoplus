@@ -28,7 +28,6 @@
       overflow: hidden;
     }
 
-    /* Sidebar */
     #sidebar {
       background:#fff;
       border-right:1px solid #ccc;
@@ -42,11 +41,7 @@
       background:#eef5ff;
       border-bottom:1px solid #ccc;
     }
-    #chat-list {
-      list-style:none;
-      margin:0;
-      padding:0;
-    }
+    #chat-list { list-style:none; margin:0; padding:0; }
     #chat-list li {
       padding:0.75rem;
       border-bottom:1px solid #eee;
@@ -57,7 +52,6 @@
       font-weight:bold;
     }
 
-    /* Chat content */
     #main {
       flex:1;
       display:flex;
@@ -83,7 +77,6 @@
       object-fit:cover;
     }
 
-    /* Input */
     #input-bar {
       display:flex;
       border-top:1px solid #ccc;
@@ -107,7 +100,6 @@
       font-size:1rem;
     }
 
-    /* Online users */
     #online-list {
       border-top:1px solid #ccc;
       max-height:150px;
@@ -128,7 +120,6 @@
       object-fit:cover;
     }
 
-    /* Mobile */
     @media (max-width:768px) {
       #sidebar {
         position:absolute;
@@ -139,9 +130,7 @@
         transition:left 0.3s;
         z-index:1000;
       }
-      #sidebar.show {
-        left:0;
-      }
+      #sidebar.show { left:0; }
       #toggle-sidebar {
         position:absolute;
         left:10px;
@@ -162,7 +151,6 @@
   </header>
 
   <div id="app">
-    <!-- Sidebar -->
     <div id="sidebar">
       <h3>Chat</h3>
       <ul id="chat-list">
@@ -172,7 +160,6 @@
       <div id="online-list"></div>
     </div>
 
-    <!-- Main -->
     <div id="main">
       <div id="chat-window"></div>
       <div id="input-bar">
@@ -196,7 +183,7 @@ const onlineList = document.getElementById('online-list');
 const sidebar = document.getElementById('sidebar');
 const toggleSidebarBtn = document.getElementById('toggle-sidebar');
 
-/* Mostra messaggi */
+/* RENDER CHAT */
 function renderChat() {
   chatWindow.innerHTML = "";
   (chats[activeChat] || []).forEach(m => {
@@ -213,7 +200,7 @@ function renderChat() {
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-/* Invia messaggio */
+/* INVIA MESSAGGIO */
 function sendMessage() {
   const text = msgInput.value.trim();
   if (!text || !socket || socket.readyState !== WebSocket.OPEN) return;
@@ -222,16 +209,13 @@ function sendMessage() {
     socket.send(JSON.stringify({ type: "chat", message: text }));
   } else {
     socket.send(JSON.stringify({ type: "private", to: activeChat, message: text }));
-    if (!chats[activeChat]) chats[activeChat] = [];
-    chats[activeChat].push({ user: userData.name, profilePic: userData.profilePic, message: text });
-    renderChat();
   }
   msgInput.value = "";
 }
-sendBtn.addEventListener('click', sendMessage);
+sendBtn.onclick = sendMessage;
 msgInput.addEventListener('keydown', e => { if (e.key === "Enter") sendMessage(); });
 
-/* Connessione WebSocket */
+/* APERTURA WEBSOCKET */
 function startChat() {
   socket = new WebSocket('wss://' + window.location.host);
 
@@ -241,19 +225,19 @@ function startChat() {
 
   socket.addEventListener('message', ev => {
     let data;
-    try { data = JSON.parse(ev.data); } catch(e){ return; }
+    try { data = JSON.parse(ev.data); } catch { return; }
 
     if (data.type === "chat") {
       chats.public.push({ user: data.user, profilePic: data.profilePic, message: data.message });
       if (activeChat === "public") renderChat();
 
-    } else if (data.type === "chatHistory") {
-      // ✅ cronologia ricevuta dal server
-      chats[data.chat] = (data.messages || []).map(m => ({
+    } else if (data.type === "chat_history") {
+      chats[data.chat] = data.messages.map(m => ({
         user: m.user || m.from,
         profilePic: m.profilePic,
         message: m.message
       }));
+      ensureChatInList(data.chat === "public" ? "public" : data.chat);
       if (activeChat === data.chat) renderChat();
 
     } else if (data.type === "online") {
@@ -268,31 +252,28 @@ function startChat() {
       });
 
     } else if (data.type === "private") {
-      if (data.from === userData.name) return;
-      if (!chats[data.from]) chats[data.from] = [];
-      chats[data.from].push({ user: data.from, profilePic: data.profilePic, message: data.message });
-      ensureChatInList(data.from);
-      if (activeChat === data.from) renderChat();
+      const chatId = [data.from, data.to].sort().join('_');
+      if (!chats[chatId]) chats[chatId] = [];
+      chats[chatId].push({ user: data.from, profilePic: data.profilePic, message: data.message });
+      ensureChatInList(chatId);
+      if (activeChat === chatId) renderChat();
     }
   });
 }
 
-/* Apri chat privata */
+/* CHAT PRIVATE */
 function openPrivateChat(name, pic) {
-  if (name === userData.name) return;
-  activeChat = name;
-  if (!chats[name]) chats[name] = [];
-  ensureChatInList(name);
-  setActiveChat(name);
-  socket.send(JSON.stringify({ type: "loadPrivateChat", with: name }));
+  const chatId = [userData.name, name].sort().join('_');
+  if (!chats[chatId]) chats[chatId] = [];
+  ensureChatInList(chatId, name);
+  setActiveChat(chatId);
 }
 
-/* Gestione lista chat */
-function ensureChatInList(name) {
-  if (name === "me") return;
+/* CHAT LISTA */
+function ensureChatInList(name, label) {
   if (!chatList.querySelector(`[data-chat="${name}"]`)) {
     const li = document.createElement('li');
-    li.textContent = name;
+    li.textContent = label || name.replace(/_/g, ' & ');
     li.dataset.chat = name;
     li.onclick = () => setActiveChat(name);
     chatList.appendChild(li);
@@ -305,10 +286,7 @@ function setActiveChat(name) {
   renderChat();
 }
 
-/* Torna alla chat pubblica */
-chatList.querySelector('[data-chat="public"]').onclick = () => setActiveChat("public");
-
-/* Mobile */
+/* MOBILE */
 if (window.innerWidth <= 768) {
   toggleSidebarBtn.style.display = "inline-block";
   toggleSidebarBtn.addEventListener('click', () => {
@@ -316,9 +294,10 @@ if (window.innerWidth <= 768) {
   });
 }
 
-/* Start */
+/* START */
 if (userData) startChat();
 else alert("Prima completa la registrazione!");
 </script>
 </body>
 </html>
+
