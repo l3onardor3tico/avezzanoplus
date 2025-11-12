@@ -1,59 +1,9 @@
-<!DOCTYPE html>
-<html lang="it">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-  <title>Avezzano Plus</title>
-  <style>
-    html, body { height:100%; margin:0; padding:0; font-family:sans-serif; background:#f9f9f9; overflow-x:hidden; }
-    header { background:#007bff; color:#fff; padding:1rem; text-align:center; flex-shrink:0; }
-    #app { display:flex; height:calc(100% - 64px); overflow:hidden; }
-    #sidebar { background:#fff; border-right:1px solid #ccc; width:220px; flex-shrink:0; overflow-y:auto; }
-    #sidebar h3 { margin:0; padding:0.75rem; background:#eef5ff; border-bottom:1px solid #ccc; }
-    #chat-list { list-style:none; margin:0; padding:0; }
-    #chat-list li { padding:0.75rem; border-bottom:1px solid #eee; cursor:pointer; }
-    #chat-list li.active { background:#dbe8ff; font-weight:bold; }
-    #main { flex:1; display:flex; flex-direction:column; min-width:0; }
-    #chat-window { flex:1; overflow-y:auto; padding:1rem; background:#fff; }
-    .msg { display:flex; align-items:center; margin-bottom:6px; word-wrap:break-word; }
-    .msg img { width:32px; height:32px; border-radius:50%; margin-right:8px; object-fit:cover; }
-    #input-bar { display:flex; border-top:1px solid #ccc; background:#f1f1f1; padding:0.5rem; }
-    #input-bar input { flex:1; padding:0.5rem; border:1px solid #ccc; border-radius:4px; font-size:1rem; }
-    #input-bar button { margin-left:0.5rem; padding:0.5rem 1rem; border:none; background:#007bff; color:#fff; border-radius:4px; font-size:1rem; }
-    #online-list { border-top:1px solid #ccc; max-height:150px; overflow-y:auto; background:#fafafa; }
-    .user { display:flex; align-items:center; padding:0.5rem; border-bottom:1px solid #eee; cursor:pointer; }
-    .user img { width:28px; height:28px; border-radius:50%; margin-right:8px; object-fit:cover; }
-    @media (max-width:768px){ #sidebar{position:absolute;left:-240px;top:64px;bottom:0;width:220px;transition:left 0.3s;z-index:1000;} #sidebar.show{left:0;} #toggle-sidebar{position:absolute;left:10px;top:10px;background:#fff;border:1px solid #ccc;padding:0.25rem 0.5rem;cursor:pointer;border-radius:4px;} }
-  </style>
-</head>
-<body>
-  <header>
-    Avezzano Plus
-    <button id="toggle-sidebar" style="display:none;">☰</button>
-  </header>
-
-  <div id="app">
-    <div id="sidebar">
-      <h3>Chat</h3>
-      <ul id="chat-list"><li class="active" data-chat="public">Chat Pubblica</li></ul>
-      <h3>Utenti online</h3>
-      <div id="online-list"></div>
-    </div>
-
-    <div id="main">
-      <div id="chat-window"></div>
-      <div id="input-bar">
-        <input id="msg" placeholder="Scrivi un messaggio..." maxlength="240">
-        <button id="sendBtn">Invia</button>
-      </div>
-    </div>
-  </div>
-
 <script>
 let socket;
 let userData = JSON.parse(localStorage.getItem('userData') || 'null');
 let activeChat = "public";
 let chats = { public: [] };
+let socketReady = false;
 
 const chatWindow = document.getElementById('chat-window');
 const sendBtn = document.getElementById('sendBtn');
@@ -81,7 +31,7 @@ function renderChat() {
 
 function sendMessage() {
   const text = msgInput.value.trim();
-  if (!text || !socket || socket.readyState !== WebSocket.OPEN) return;
+  if (!text || !socketReady) return;
 
   if (activeChat === "public") {
     socket.send(JSON.stringify({ type: "chat", message: text }));
@@ -100,8 +50,11 @@ function startChat() {
   socket = new WebSocket('wss://' + window.location.host);
 
   socket.addEventListener('open', () => {
+    socketReady = true;
     socket.send(JSON.stringify({ type: 'join', name: userData.name, profilePic: userData.profilePic }));
   });
+
+  socket.addEventListener('close', () => socketReady = false);
 
   socket.addEventListener('message', ev => {
     let data;
@@ -145,12 +98,18 @@ function openPrivateChat(name, pic) {
   ensureChatInList(name);
   setActiveChat(name);
 
-  // Se esistono messaggi locali, mostra subito
   if (!chats[name]) chats[name] = [];
   renderChat();
 
-  // Richiedi cronologia anche se utente offline
-  socket.send(JSON.stringify({ type: "loadPrivateChat", with: name }));
+  // ✅ attende che il socket sia pronto prima di inviare la richiesta
+  const tryLoad = () => {
+    if (socketReady && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "loadPrivateChat", with: name }));
+    } else {
+      setTimeout(tryLoad, 200); // ritenta finché non è pronto
+    }
+  };
+  tryLoad();
 }
 
 function ensureChatInList(name) {
@@ -181,5 +140,3 @@ if (window.innerWidth <= 768) {
 if (userData) startChat();
 else alert("Prima completa la registrazione!");
 </script>
-</body>
-</html>
