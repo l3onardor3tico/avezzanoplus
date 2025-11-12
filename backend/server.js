@@ -14,7 +14,7 @@ server.listen(PORT, () => {
   console.log(`WebSocket server in ascolto sulla porta ${PORT}`);
 });
 
-const clients = new Map(); // ws => { name, profilePic }
+const clients = new Map();
 const CHAT_FILE = path.join(__dirname, 'chats.json');
 
 function loadChats() {
@@ -33,12 +33,12 @@ function saveChats() {
 function cleanOldPublicMessages() {
   const now = Date.now();
   const week = 7 * 24 * 60 * 60 * 1000;
-  chats.public = chats.public.filter(m => now - (m.timestamp || 0) < week);
+  chats.public = chats.public.filter(m => now - m.timestamp < week);
   saveChats();
 }
 
-function privateKey(userA, userB) {
-  return [userA, userB].sort().join('_');
+function privateKey(a, b) {
+  return [a, b].sort().join('_');
 }
 
 function send(ws, msg) {
@@ -53,13 +53,13 @@ function broadcast(msg) {
 }
 
 function broadcastOnline() {
-  const users = Array.from(clients.values())
-    .filter(u => u && u.name)
-    .map(u => ({ name: u.name, profilePic: u.profilePic }));
+  const users = Array.from(clients.values()).map(u => ({
+    name: u.name,
+    profilePic: u.profilePic
+  }));
   broadcast({ type: 'online', count: users.length, users });
 }
 
-// In-memory chats (loaded from disk)
 let chats = loadChats();
 cleanOldPublicMessages();
 
@@ -71,60 +71,42 @@ wss.on('connection', (ws) => {
     let data;
     try { data = JSON.parse(msg); } catch (e) { return; }
 
-    // ==== REGISTER / JOIN ====
     if (data.type === 'join' || data.type === 'register') {
       clients.set(ws, { name: data.name || 'Utente', profilePic: data.profilePic || '' });
       console.log('Registrato utente:', clients.get(ws).name);
 
-      // Invia cronologia pubblica (ultimi 7 giorni)
       cleanOldPublicMessages();
       send(ws, { type: 'chatHistory', chat: 'public', messages: chats.public });
-
       broadcastOnline();
       return;
     }
 
-    // ==== PUBLIC CHAT ====
     if (data.type === 'chat') {
       const info = clients.get(ws);
       if (!info || !info.name) return;
 
-      // assicuriamoci di avere un id
-      const id = data.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
       const message = {
-        id: id,
         user: info.name,
         profilePic: info.profilePic,
         message: data.message || '',
         timestamp: Date.now()
       };
-
-      chats.public = chats.public || [];
       chats.public.push(message);
       cleanOldPublicMessages();
       saveChats();
-
-      // broadcast include id
       broadcast({ type: 'chat', ...message });
       return;
     }
 
-    // ==== PRIVATE MESSAGE ====
     if (data.type === 'private') {
       const sender = clients.get(ws);
       if (!sender || !sender.name) return;
       const targetName = data.to;
-      if (!targetName) return;
-
       const key = privateKey(sender.name, targetName);
-      chats.private = chats.private || {};
+
       if (!chats.private[key]) chats.private[key] = [];
 
-      const id = data.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
       const message = {
-        id: id,
         from: sender.name,
         to: targetName,
         profilePic: sender.profilePic,
@@ -135,35 +117,37 @@ wss.on('connection', (ws) => {
       chats.private[key].push(message);
       saveChats();
 
-      // invia al destinatario se online
+      // ✅ Invia a destinatario se online
       for (const [client, info] of clients.entries()) {
         if (info.name === targetName && client.readyState === WebSocket.OPEN) {
           send(client, { type: 'private', ...message });
         }
       }
 
-      // rimanda anche al mittente (con id) — il client mittente ignorerà tramite id già visto
+      // ✅ Sempre rimanda al mittente
       send(ws, { type: 'private', ...message });
       return;
     }
 
-    // ==== LOAD PRIVATE HISTORY ====
     if (data.type === 'loadPrivateChat') {
       const user = clients.get(ws);
       if (!user || !user.name) return;
-      const other = data.with;
-      const key = privateKey(user.name, other);
-      const history = (chats.private && chats.private[key]) ? chats.private[key] : [];
-      send(ws, { type: 'chatHistory', chat: other, messages: history });
+
+      const key = privateKey(user.name, data.with);
+
+      // ✅ crea la chat se non esiste, anche vuota
+      if (!chats.private[key]) chats.private[key] = [];
+
+      const history = chats.private[key];
+      send(ws, { type: 'chatHistory', chat: data.with, messages: history });
       return;
     }
   });
 
   ws.on('close', () => {
-    const info = clients.get(ws);
-    console.log('Client disconnesso:', info?.name || 'sconosciuto');
     clients.delete(ws);
     broadcastOnline();
+    console.log('Client disconnesso, utenti online:', clients.size);
   });
 });
 
