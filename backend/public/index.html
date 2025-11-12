@@ -129,30 +129,13 @@ function flushQueue() {
 function genId() { return `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
 
 function sendMessage() {
-  const text = (msgInput.value || '').trim();
+  const text = msgInput.value.trim();
   if (!text) return;
-  if (!userData) { alert('Devi registrarti prima'); return; }
 
-  const id = genId();
-  const local = { id, user: userData.name, profilePic: userData.profilePic, message: text, timestamp: Date.now() };
-
-  if (activeChat === 'public') {
-    chats.public = chats.public || [];
-    chats.public.push(local);
-    renderChat();
-    queueOrSend({ type: 'chat', message: text, id });
-  } else {
-    chats[activeChat] = chats[activeChat] || [];
-    chats[activeChat].push(local);
-    renderChat();
-    if (!openedChats.includes(activeChat)) { openedChats.push(activeChat); saveOpenedChats(); ensureChatInList(activeChat); }
-    queueOrSend({ type: 'private', to: activeChat, message: text, id });
-  }
-
-  // Marca come già mostrato così l'eco dal server verrà ignorata
-  receivedIds.add(id);
-  msgInput.value = '';
+  socket.send(JSON.stringify({ type: "chat", message: text }));
+  msgInput.value = "";
 }
+
 
 function openPrivateChat(name) {
   if (!userData) { alert('Devi registrarti prima'); return; }
