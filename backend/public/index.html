@@ -1,72 +1,188 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Avezzano Plus</title>
   <style>
-    html, body { height:100%; margin:0; padding:0; font-family:sans-serif; background:#f9f9f9; overflow-x:hidden; }
-    header { background:#007bff; color:#fff; padding:1rem; text-align:center; flex-shrink:0; position:relative; }
-    #app { display:flex; height:calc(100% - 64px); overflow:hidden; }
-    #sidebar { background:#fff; border-right:1px solid #ccc; width:220px; flex-shrink:0; overflow-y:auto; }
-    #sidebar h3 { margin:0; padding:0.75rem; background:#eef5ff; border-bottom:1px solid #ccc; }
-    #chat-list { list-style:none; margin:0; padding:0; }
-    #chat-list li { padding:0.75rem; border-bottom:1px solid #eee; cursor:pointer; }
-    #chat-list li.active { background:#dbe8ff; font-weight:bold; }
-    #main { flex:1; display:flex; flex-direction:column; min-width:0; }
-    #chat-window { flex:1; overflow-y:auto; padding:1rem; background:#fff; }
-    .msg { display:flex; align-items:center; margin-bottom:6px; word-wrap:break-word; }
-    .msg img { width:32px; height:32px; border-radius:50%; margin-right:8px; object-fit:cover; }
-    .msg .bubble { background:#f4f6fb; padding:8px 10px; border-radius:8px; max-width:80%; word-wrap:break-word; }
-    .msg.me .bubble { background:#dbe8ff; }
-    #input-bar { display:flex; border-top:1px solid #ccc; background:#f1f1f1; padding:0.5rem; }
-    #input-bar input { flex:1; padding:0.5rem; border:1px solid #ccc; border-radius:4px; font-size:1rem; }
-    #input-bar button { margin-left:0.5rem; padding:0.5rem 1rem; border:none; background:#007bff; color:#fff; border-radius:4px; font-size:1rem; cursor:pointer; }
-    #online-list { border-top:1px solid #ccc; max-height:150px; overflow-y:auto; background:#fafafa; }
-    .user { display:flex; align-items:center; padding:0.5rem; border-bottom:1px solid #eee; cursor:pointer; }
-    .user img { width:28px; height:28px; border-radius:50%; margin-right:8px; object-fit:cover; }
-    #status { position:absolute; right:12px; top:12px; color:#fff; font-size:0.85rem; opacity:0.95; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background: #f3f3f3;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: #007bff;
+      color: white;
+      padding: 10px 15px;
+      font-size: 1.3em;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+    #sidebar {
+      width: 250px;
+      background: #fff;
+      border-right: 1px solid #ddd;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.3s ease;
+    }
+    #sidebar.show {
+      transform: translateX(0);
+    }
+    #chat-list, #online-list {
+      flex: 1;
+      overflow-y: auto;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    #chat-list li {
+      padding: 10px;
+      cursor: pointer;
+      border-bottom: 1px solid #eee;
+    }
+    #chat-list li.active {
+      background: #007bff;
+      color: white;
+    }
+    #online-list .user {
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      border-bottom: 1px solid #eee;
+    }
+    #online-list .user img {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    #chat-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #f9f9f9;
+    }
+    #chat-window {
+      flex: 1;
+      overflow-y: auto;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .msg {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      max-width: 80%;
+    }
+    .msg.me {
+      align-self: flex-end;
+      flex-direction: row-reverse;
+    }
+    .msg img {
+      width: 35px;
+      height: 35px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    .bubble {
+      padding: 10px 14px;
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    }
+    .msg.me .bubble {
+      background: #d1eaff;
+    }
+    #input-area {
+      display: flex;
+      padding: 10px;
+      background: #fff;
+      border-top: 1px solid #ddd;
+    }
+    #msg {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 20px;
+      outline: none;
+      font-size: 1em;
+    }
+    #sendBtn {
+      margin-left: 8px;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 20px;
+      background: #007bff;
+      color: white;
+      cursor: pointer;
+    }
+    #sendBtn:hover {
+      background: #005fc9;
+    }
+    #toggle-sidebar {
+      display: none;
+      font-size: 1.3em;
+      cursor: pointer;
+    }
+    #conn-state {
+      font-size: 0.9em;
+      opacity: 0.8;
+    }
 
-    @media (max-width:768px){
-      #sidebar { position:absolute; left:-240px; top:64px; bottom:0; width:220px; transition:left 0.3s; z-index:1000; }
-      #sidebar.show { left:0; }
-      #toggle-sidebar { position:absolute; left:10px; top:10px; background:#fff; border:1px solid #ccc; padding:0.25rem 0.5rem; cursor:pointer; border-radius:4px; }
+    @media (max-width: 768px) {
+      #sidebar {
+        position: absolute;
+        z-index: 1000;
+        height: 100%;
+        transform: translateX(-100%);
+      }
+      #toggle-sidebar {
+        display: inline-block;
+      }
     }
   </style>
 </head>
 <body>
   <header>
-    Avezzano Plus
-    <button id="toggle-sidebar" style="display:none;">☰</button>
-    <div id="status">Connessione: <span id="conn-state">—</span></div>
+    <span id="toggle-sidebar">☰</span>
+    <span>Avezzano Plus</span>
+    <span id="conn-state">disconnesso</span>
   </header>
 
-  <div id="app">
+  <div id="main">
     <div id="sidebar">
-      <h3>Chat</h3>
-      <ul id="chat-list"><li class="active" data-chat="public">Chat Pubblica</li></ul>
-      <h3>Utenti online</h3>
+      <h3 style="margin:10px;">Chat</h3>
+      <ul id="chat-list">
+        <li data-chat="public" class="active">Chat Pubblica</li>
+      </ul>
+      <h3 style="margin:10px;">Utenti Online</h3>
       <div id="online-list"></div>
     </div>
 
-    <div id="main">
-      <div id="chat-window" aria-live="polite"></div>
-      <div id="input-bar">
-        <input id="msg" placeholder="Scrivi un messaggio..." maxlength="240" autocomplete="off">
+    <div id="chat-section">
+      <div id="chat-window"></div>
+      <div id="input-area">
+        <input id="msg" placeholder="Scrivi un messaggio..." autocomplete="off" />
         <button id="sendBtn">Invia</button>
       </div>
     </div>
   </div>
 
-<script>
-/*
-  Client robusto per:
-  - chat pubblica (cronologia fornita dal server)
-  - chat private sempre accessibili (richiesta di cronologia anche quando destinatario offline)
-  - resilienza su mobile: queue per messaggi e richieste se socket non pronto
-  - persistenza lista chat aperte in localStorage
-*/
-
+  <script>
 const chatWindow = document.getElementById('chat-window');
 const sendBtn = document.getElementById('sendBtn');
 const msgInput = document.getElementById('msg');
@@ -78,19 +194,15 @@ const connState = document.getElementById('conn-state');
 
 let socket = null;
 let socketReady = false;
-let pendingQueue = []; // messaggi o comandi da inviare quando socket apre
+let pendingQueue = [];
 let userData = JSON.parse(localStorage.getItem('userData') || 'null');
-let openedChats = JSON.parse(localStorage.getItem('openedChats') || '[]'); // array di nomi
+let openedChats = JSON.parse(localStorage.getItem('openedChats') || '[]');
 let activeChat = 'public';
-let chats = {}; // chats['public'] = [{...}], chats['Mario Rossi'] = [{...}]
+let chats = { public: [] };
+let receivedMessageIds = new Set();
 
-// inizializzazione dati locali (manteniamo messaggi pubblici in memoria, il server li restituisce)
-chats.public = chats.public || [];
-
-// UI helpers
 function setConnState(s) { connState.textContent = s; }
 
-// render messages for active chat
 function renderChat() {
   chatWindow.innerHTML = '';
   const list = chats[activeChat] || [];
@@ -109,10 +221,10 @@ function renderChat() {
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-// persist opened chats list
-function saveOpenedChats() { localStorage.setItem('openedChats', JSON.stringify(openedChats)); }
+function saveOpenedChats() {
+  localStorage.setItem('openedChats', JSON.stringify(openedChats));
+}
 
-// ensure chat listed in sidebar
 function ensureChatInList(name) {
   if (!chatList.querySelector(`[data-chat="${CSS.escape(name)}"]`)) {
     const li = document.createElement('li');
@@ -123,14 +235,12 @@ function ensureChatInList(name) {
   }
 }
 
-// switch active chat
 function setActiveChat(name) {
   activeChat = name;
   [...chatList.children].forEach(li => li.classList.toggle('active', li.dataset.chat === name));
   renderChat();
 }
 
-// queue send helper
 function queueOrSend(obj) {
   if (socketReady && socket && socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(obj));
@@ -139,70 +249,63 @@ function queueOrSend(obj) {
   }
 }
 
-// flush pending queue
 function flushQueue() {
   while (pendingQueue.length) {
     const obj = pendingQueue.shift();
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(obj));
     } else {
-      // push back and retry later
       pendingQueue.unshift(obj);
       break;
     }
   }
 }
 
-// send message (public/private)
 function sendMessage() {
   const text = (msgInput.value || '').trim();
   if (!text) return;
   if (!userData) { alert('Devi registrarti prima'); return; }
 
+  const messageId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const local = {
+    id: messageId,
+    user: userData.name,
+    profilePic: userData.profilePic,
+    message: text,
+    timestamp: Date.now()
+  };
+
   if (activeChat === 'public') {
-    // create local echo (server will re-broadcast and also store)
-    const local = { user: userData.name, profilePic: userData.profilePic, message: text, timestamp: Date.now() };
-    chats.public = chats.public || [];
     chats.public.push(local);
     renderChat();
-    queueOrSend({ type: 'chat', message: text });
+    queueOrSend({ type: 'chat', message: text, id: messageId });
   } else {
-    // private: save locally and send
     chats[activeChat] = chats[activeChat] || [];
-    const local = { user: userData.name, profilePic: userData.profilePic, message: text, timestamp: Date.now() };
     chats[activeChat].push(local);
     renderChat();
-    // ensure the chat is recorded as opened (persist)
     if (!openedChats.includes(activeChat)) {
       openedChats.push(activeChat);
       saveOpenedChats();
       ensureChatInList(activeChat);
     }
-    queueOrSend({ type: 'private', to: activeChat, message: text });
+    queueOrSend({ type: 'private', to: activeChat, message: text, id: messageId });
   }
 
+  receivedMessageIds.add(messageId);
   msgInput.value = '';
 }
 
-// open private chat (always accessible)
 function openPrivateChat(name, pic) {
   if (!userData) { alert('Devi registrarti prima'); return; }
   if (name === userData.name) return;
-  // ensure in opened list and sidebar
-  if (!openedChats.includes(name)) {
-    openedChats.push(name);
-    saveOpenedChats();
-  }
+  if (!openedChats.includes(name)) { openedChats.push(name); saveOpenedChats(); }
   ensureChatInList(name);
   setActiveChat(name);
-  // ensure local array exists (will display empty until history arrives)
   chats[name] = chats[name] || [];
   renderChat();
-  // request history — queue if socket not ready
   queueOrSend({ type: 'loadPrivateChat', with: name });
 }
 
-// WebSocket init
 function startChat() {
   const proto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
   socket = new WebSocket(proto + window.location.host);
@@ -213,62 +316,44 @@ function startChat() {
   socket.addEventListener('open', () => {
     socketReady = true;
     setConnState('connesso');
-    // send join
     socket.send(JSON.stringify({ type: 'join', name: userData.name, profilePic: userData.profilePic }));
-    // flush any queued commands/messages
     flushQueue();
-
-    // request chatHistory for all previously opened private chats (persistenza)
     for (const name of openedChats) {
-      // ensure listed client-side
       ensureChatInList(name);
-      // ask server for history (server will respond even if other offline)
       queueOrSend({ type: 'loadPrivateChat', with: name });
     }
   });
 
   socket.addEventListener('close', () => {
     socketReady = false;
-    setConnState('disconnesso — riconnessione in corso');
-    // try to auto-reconnect after short delay (exponential backoff could be added)
-    setTimeout(() => {
-      try { startChat(); } catch(e) {}
-    }, 1500);
-  });
-
-  socket.addEventListener('error', (err) => {
-    socketReady = false;
-    setConnState('errore connessione');
-    console.error('WS error', err);
+    setConnState('disconnesso — riconnessione...');
+    setTimeout(() => { try { startChat(); } catch(e){} }, 1500);
   });
 
   socket.addEventListener('message', ev => {
     let data;
     try { data = JSON.parse(ev.data); } catch (e) { return; }
 
+    if (data.id && receivedMessageIds.has(data.id)) return;
+    if (data.id) receivedMessageIds.add(data.id);
+
     if (data.type === 'chat') {
-      chats.public = chats.public || [];
       chats.public.push({ user: data.user, profilePic: data.profilePic, message: data.message, timestamp: data.timestamp });
       if (activeChat === 'public') renderChat();
-    }
-
-    else if (data.type === 'chatHistory') {
-      // data.chat is 'public' or username; data.messages array
+    } else if (data.type === 'chatHistory') {
       const chatId = data.chat === 'public' ? 'public' : data.chat;
       chats[chatId] = (data.messages || []).map(m => ({
         user: m.user || m.from,
         profilePic: m.profilePic,
         message: m.message,
-        timestamp: m.timestamp
+        timestamp: m.timestamp,
+        id: m.id
       }));
-      // ensure it's in openedChats for persistence if private
       if (chatId !== 'public' && !openedChats.includes(chatId)) {
         openedChats.push(chatId); saveOpenedChats(); ensureChatInList(chatId);
       }
       if (activeChat === chatId) renderChat();
-    }
-
-    else if (data.type === 'online') {
+    } else if (data.type === 'online') {
       onlineList.innerHTML = '';
       (data.users || []).forEach(u => {
         if (u.name === userData.name) return;
@@ -278,61 +363,36 @@ function startChat() {
         row.addEventListener('click', () => openPrivateChat(u.name, u.profilePic));
         onlineList.appendChild(row);
       });
-    }
-
-    else if (data.type === 'private') {
-      // a private message delivered by server (could be to recipient or echo to sender)
-      // server sends 'from' and 'to'; ignore echoes that duplicate local appended message?
+    } else if (data.type === 'private') {
       const from = data.from;
       const to = data.to;
-      // determine chat id for local storage: the other participant's name
       const other = (from === userData.name) ? to : from;
       if (!other) return;
       chats[other] = chats[other] || [];
-
-      // server may echo a message back to sender; avoid duplicate if we already appended local echo.
-      // We'll append if not exact duplicate by timestamp.
-      const existsSame = chats[other].some(m => m.timestamp === data.timestamp && m.message === data.message && m.user === data.from);
-      if (!existsSame) {
-        chats[other].push({ user: data.from, profilePic: data.profilePic, message: data.message, timestamp: data.timestamp });
-      }
-
+      chats[other].push({ user: data.from, profilePic: data.profilePic, message: data.message, timestamp: data.timestamp, id: data.id });
       ensureChatInList(other);
       if (activeChat === other) renderChat();
     }
   });
 }
 
-// UI bindings
 sendBtn.addEventListener('click', sendMessage);
 msgInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
 
-// sidebar mobile toggle
 if (window.innerWidth <= 768) {
   toggleSidebarBtn.style.display = 'inline-block';
   toggleSidebarBtn.addEventListener('click', () => sidebar.classList.toggle('show'));
 }
 
-// restore opened chats in UI
 for (const name of openedChats) ensureChatInList(name);
-
-// default public chat active
 chatList.querySelector('[data-chat="public"]').addEventListener('click', () => setActiveChat('public'));
 
-// start if userData present
 if (!userData) {
   alert('Prima completa la registrazione!');
 } else {
-  // ensure userData keys exist to avoid crashes
-  userData.name = userData.name || 'Utente';
-  userData.profilePic = userData.profilePic || '';
-  // create public chat array if missing
-  chats.public = chats.public || [];
-  // initialize socket
   startChat();
-  // render any cached chat if active exists in chats
   setActiveChat('public');
 }
-</script>
+  </script>
 </body>
 </html>
