@@ -59,14 +59,6 @@
   </div>
 
 <script>
-/*
-  Client robusto per:
-  - chat pubblica (cronologia fornita dal server)
-  - chat private sempre accessibili (richiesta di cronologia anche quando destinatario offline)
-  - resilienza su mobile: queue per messaggi e richieste se socket non pronto
-  - persistenza lista chat aperte in localStorage
-*/
-
 const chatWindow = document.getElementById('chat-window');
 const sendBtn = document.getElementById('sendBtn');
 const msgInput = document.getElementById('msg');
@@ -78,19 +70,15 @@ const connState = document.getElementById('conn-state');
 
 let socket = null;
 let socketReady = false;
-let pendingQueue = []; // messaggi o comandi da inviare quando socket apre
+let pendingQueue = [];
 let userData = JSON.parse(localStorage.getItem('userData') || 'null');
-let openedChats = JSON.parse(localStorage.getItem('openedChats') || '[]'); // array di nomi
+let openedChats = JSON.parse(localStorage.getItem('openedChats') || '[]');
 let activeChat = 'public';
-let chats = {}; // chats['public'] = [{...}], chats['Mario Rossi'] = [{...}]
-
-// inizializzazione dati locali (manteniamo messaggi pubblici in memoria, il server li restituisce)
+let chats = {};
 chats.public = chats.public || [];
 
-// UI helpers
 function setConnState(s) { connState.textContent = s; }
 
-// render messages for active chat
 function renderChat() {
   chatWindow.innerHTML = '';
   const list = chats[activeChat] || [];
@@ -109,10 +97,8 @@ function renderChat() {
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-// persist opened chats list
 function saveOpenedChats() { localStorage.setItem('openedChats', JSON.stringify(openedChats)); }
 
-// ensure chat listed in sidebar
 function ensureChatInList(name) {
   if (!chatList.querySelector(`[data-chat="${CSS.escape(name)}"]`)) {
     const li = document.createElement('li');
@@ -123,14 +109,12 @@ function ensureChatInList(name) {
   }
 }
 
-// switch active chat
 function setActiveChat(name) {
   activeChat = name;
   [...chatList.children].forEach(li => li.classList.toggle('active', li.dataset.chat === name));
   renderChat();
 }
 
-// queue send helper
 function queueOrSend(obj) {
   if (socketReady && socket && socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(obj));
@@ -139,40 +123,31 @@ function queueOrSend(obj) {
   }
 }
 
-// flush pending queue
 function flushQueue() {
   while (pendingQueue.length) {
     const obj = pendingQueue.shift();
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(obj));
     } else {
-      // push back and retry later
       pendingQueue.unshift(obj);
       break;
     }
   }
 }
 
-// send message (public/private)
 function sendMessage() {
   const text = (msgInput.value || '').trim();
   if (!text) return;
   if (!userData) { alert('Devi registrarti prima'); return; }
 
   if (activeChat === 'public') {
-    // create local echo (server will re-broadcast and also store)
-    const local = { user: userData.name, profilePic: userData.profilePic, message: text, timestamp: Date.now() };
-    chats.public = chats.public || [];
-    chats.public.push(local);
-    renderChat();
+    // 🔧 RIMOSSO L’ECO LOCALE → non aggiungiamo più il messaggio localmente
     queueOrSend({ type: 'chat', message: text });
   } else {
-    // private: save locally and send
     chats[activeChat] = chats[activeChat] || [];
     const local = { user: userData.name, profilePic: userData.profilePic, message: text, timestamp: Date.now() };
     chats[activeChat].push(local);
     renderChat();
-    // ensure the chat is recorded as opened (persist)
     if (!openedChats.includes(activeChat)) {
       openedChats.push(activeChat);
       saveOpenedChats();
@@ -184,25 +159,20 @@ function sendMessage() {
   msgInput.value = '';
 }
 
-// open private chat (always accessible)
 function openPrivateChat(name, pic) {
   if (!userData) { alert('Devi registrarti prima'); return; }
   if (name === userData.name) return;
-  // ensure in opened list and sidebar
   if (!openedChats.includes(name)) {
     openedChats.push(name);
     saveOpenedChats();
   }
   ensureChatInList(name);
   setActiveChat(name);
-  // ensure local array exists (will display empty until history arrives)
   chats[name] = chats[name] || [];
   renderChat();
-  // request history — queue if socket not ready
   queueOrSend({ type: 'loadPrivateChat', with: name });
 }
 
-// WebSocket init
 function startChat() {
   const proto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
   socket = new WebSocket(proto + window.location.host);
@@ -213,16 +183,10 @@ function startChat() {
   socket.addEventListener('open', () => {
     socketReady = true;
     setConnState('connesso');
-    // send join
     socket.send(JSON.stringify({ type: 'join', name: userData.name, profilePic: userData.profilePic }));
-    // flush any queued commands/messages
     flushQueue();
-
-    // request chatHistory for all previously opened private chats (persistenza)
     for (const name of openedChats) {
-      // ensure listed client-side
       ensureChatInList(name);
-      // ask server for history (server will respond even if other offline)
       queueOrSend({ type: 'loadPrivateChat', with: name });
     }
   });
@@ -230,7 +194,6 @@ function startChat() {
   socket.addEventListener('close', () => {
     socketReady = false;
     setConnState('disconnesso — riconnessione in corso');
-    // try to auto-reconnect after short delay (exponential backoff could be added)
     setTimeout(() => {
       try { startChat(); } catch(e) {}
     }, 1500);
@@ -253,7 +216,6 @@ function startChat() {
     }
 
     else if (data.type === 'chatHistory') {
-      // data.chat is 'public' or username; data.messages array
       const chatId = data.chat === 'public' ? 'public' : data.chat;
       chats[chatId] = (data.messages || []).map(m => ({
         user: m.user || m.from,
@@ -261,7 +223,6 @@ function startChat() {
         message: m.message,
         timestamp: m.timestamp
       }));
-      // ensure it's in openedChats for persistence if private
       if (chatId !== 'public' && !openedChats.includes(chatId)) {
         openedChats.push(chatId); saveOpenedChats(); ensureChatInList(chatId);
       }
@@ -281,56 +242,40 @@ function startChat() {
     }
 
     else if (data.type === 'private') {
-      // a private message delivered by server (could be to recipient or echo to sender)
-      // server sends 'from' and 'to'; ignore echoes that duplicate local appended message?
       const from = data.from;
       const to = data.to;
-      // determine chat id for local storage: the other participant's name
       const other = (from === userData.name) ? to : from;
       if (!other) return;
       chats[other] = chats[other] || [];
-
-      // server may echo a message back to sender; avoid duplicate if we already appended local echo.
-      // We'll append if not exact duplicate by timestamp.
       const existsSame = chats[other].some(m => m.timestamp === data.timestamp && m.message === data.message && m.user === data.from);
       if (!existsSame) {
         chats[other].push({ user: data.from, profilePic: data.profilePic, message: data.message, timestamp: data.timestamp });
       }
-
       ensureChatInList(other);
       if (activeChat === other) renderChat();
     }
   });
 }
 
-// UI bindings
 sendBtn.addEventListener('click', sendMessage);
 msgInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
 
-// sidebar mobile toggle
 if (window.innerWidth <= 768) {
   toggleSidebarBtn.style.display = 'inline-block';
   toggleSidebarBtn.addEventListener('click', () => sidebar.classList.toggle('show'));
 }
 
-// restore opened chats in UI
 for (const name of openedChats) ensureChatInList(name);
 
-// default public chat active
 chatList.querySelector('[data-chat="public"]').addEventListener('click', () => setActiveChat('public'));
 
-// start if userData present
 if (!userData) {
   alert('Prima completa la registrazione!');
 } else {
-  // ensure userData keys exist to avoid crashes
   userData.name = userData.name || 'Utente';
   userData.profilePic = userData.profilePic || '';
-  // create public chat array if missing
   chats.public = chats.public || [];
-  // initialize socket
   startChat();
-  // render any cached chat if active exists in chats
   setActiveChat('public');
 }
 </script>
