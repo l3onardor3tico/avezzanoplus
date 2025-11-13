@@ -17,10 +17,7 @@ server.listen(PORT, () => {
 const clients = new Map(); // ws => { name, profilePic }
 const CHAT_FILE = path.join(__dirname, 'chats.json');
 
-// =====================
-// FUNZIONI DI SUPPORTO
-// =====================
-
+// ===== Funzioni di supporto =====
 function loadChats() {
   try {
     const data = fs.readFileSync(CHAT_FILE, 'utf8');
@@ -57,19 +54,18 @@ function broadcast(msg) {
 }
 
 function broadcastOnline() {
-  const users = Array.from(clients.values()).map(u => ({ name: u.name, profilePic: u.profilePic }));
+  const users = Array.from(clients.values()).map(u => ({
+    name: u.name,
+    profilePic: u.profilePic
+  }));
   broadcast({ type: 'online', count: users.length, users });
 }
 
-// =====================
-// CHAT IN MEMORIA
-// =====================
+// ===== Dati in memoria =====
 let chats = loadChats();
 cleanOldPublicMessages();
 
-// =====================
-// EVENTI WEBSOCKET
-// =====================
+// ===== Eventi WebSocket =====
 wss.on('connection', (ws) => {
   console.log('Nuovo client connesso');
   clients.set(ws, { name: null, profilePic: null });
@@ -78,19 +74,28 @@ wss.on('connection', (ws) => {
     let data;
     try { data = JSON.parse(msg); } catch (e) { return; }
 
-    // ===== REGISTRAZIONE =====
+    // Registrazione / join
     if (data.type === 'join' || data.type === 'register') {
       clients.set(ws, { name: data.name || 'Utente', profilePic: data.profilePic || '' });
       console.log('Registrato utente:', clients.get(ws).name);
 
-      // Invia la chat pubblica
       cleanOldPublicMessages();
       send(ws, { type: 'chatHistory', chat: 'public', messages: chats.public });
       broadcastOnline();
       return;
     }
 
-    // ===== MESSAGGIO PUBBLICO =====
+    // Cambio foto profilo
+    if (data.type === 'updateProfilePic') {
+      const info = clients.get(ws);
+      if (!info) return;
+      info.profilePic = data.profilePic || '';
+      console.log(`Utente ${info.name} ha aggiornato la foto profilo.`);
+      broadcastOnline(); // aggiorna la lista utenti visiva per tutti
+      return;
+    }
+
+    // Messaggio pubblico
     if (data.type === 'chat') {
       const info = clients.get(ws);
       if (!info || !info.name) return;
@@ -108,12 +113,11 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // ===== MESSAGGIO PRIVATO =====
+    // Messaggio privato
     if (data.type === 'private') {
       const sender = clients.get(ws);
       if (!sender || !sender.name) return;
       const targetName = data.to;
-
       const key = privateKey(sender.name, targetName);
       if (!chats.private[key]) chats.private[key] = [];
 
@@ -127,19 +131,17 @@ wss.on('connection', (ws) => {
       chats.private[key].push(message);
       saveChats();
 
-      // ✅ Invia a destinatario solo se online
       for (const [client, info] of clients.entries()) {
         if (info.name === targetName && client.readyState === WebSocket.OPEN) {
           send(client, { type: 'private', ...message });
         }
       }
 
-      // ✅ Sempre rimanda al mittente (anche se l’altro è offline)
       send(ws, { type: 'private', ...message });
       return;
     }
 
-    // ===== RICHIESTA CRONOLOGIA PRIVATA =====
+    // Cronologia chat privata
     if (data.type === 'loadPrivateChat') {
       const user = clients.get(ws);
       if (!user || !user.name) return;
@@ -147,7 +149,6 @@ wss.on('connection', (ws) => {
       const key = privateKey(user.name, data.with);
       const history = chats.private[key] || [];
 
-      // ✅ anche se l’altro utente è offline, restituisci la chat
       send(ws, { type: 'chatHistory', chat: data.with, messages: history });
       return;
     }
@@ -159,3 +160,4 @@ wss.on('connection', (ws) => {
     console.log('Client disconnesso, utenti online:', clients.size);
   });
 });
+
