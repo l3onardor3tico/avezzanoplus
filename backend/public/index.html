@@ -141,18 +141,8 @@ function sendMessage() {
   if (!userData) { alert('Devi registrarti prima'); return; }
 
   if (activeChat === 'public') {
-    // 🔧 RIMOSSO L’ECO LOCALE → non aggiungiamo più il messaggio localmente
     queueOrSend({ type: 'chat', message: text });
   } else {
-    chats[activeChat] = chats[activeChat] || [];
-    const local = { user: userData.name, profilePic: userData.profilePic, message: text, timestamp: Date.now() };
-    chats[activeChat].push(local);
-    renderChat();
-    if (!openedChats.includes(activeChat)) {
-      openedChats.push(activeChat);
-      saveOpenedChats();
-      ensureChatInList(activeChat);
-    }
     queueOrSend({ type: 'private', to: activeChat, message: text });
   }
 
@@ -194,15 +184,12 @@ function startChat() {
   socket.addEventListener('close', () => {
     socketReady = false;
     setConnState('disconnesso — riconnessione in corso');
-    setTimeout(() => {
-      try { startChat(); } catch(e) {}
-    }, 1500);
+    setTimeout(() => { try { startChat(); } catch(e) {} }, 1500);
   });
 
-  socket.addEventListener('error', (err) => {
+  socket.addEventListener('error', () => {
     socketReady = false;
     setConnState('errore connessione');
-    console.error('WS error', err);
   });
 
   socket.addEventListener('message', ev => {
@@ -230,14 +217,19 @@ function startChat() {
     }
 
     else if (data.type === 'online') {
+      // ✅ Corretto: svuota prima la lista per evitare duplicazioni
       onlineList.innerHTML = '';
+      const unique = new Map();
       (data.users || []).forEach(u => {
         if (u.name === userData.name) return;
-        const row = document.createElement('div');
-        row.className = 'user';
-        row.innerHTML = `<img src="${u.profilePic || ''}"><span>${u.name}</span>`;
-        row.addEventListener('click', () => openPrivateChat(u.name, u.profilePic));
-        onlineList.appendChild(row);
+        if (!unique.has(u.name)) {
+          const row = document.createElement('div');
+          row.className = 'user';
+          row.innerHTML = `<img src="${u.profilePic || ''}"><span>${u.name}</span>`;
+          row.addEventListener('click', () => openPrivateChat(u.name, u.profilePic));
+          onlineList.appendChild(row);
+          unique.set(u.name, true);
+        }
       });
     }
 
@@ -247,8 +239,8 @@ function startChat() {
       const other = (from === userData.name) ? to : from;
       if (!other) return;
       chats[other] = chats[other] || [];
-      const existsSame = chats[other].some(m => m.timestamp === data.timestamp && m.message === data.message && m.user === data.from);
-      if (!existsSame) {
+      // ✅ Evita duplicati: se già esiste stesso messaggio+timestamp, non aggiungere
+      if (!chats[other].some(m => m.timestamp === data.timestamp && m.message === data.message && m.user === data.from)) {
         chats[other].push({ user: data.from, profilePic: data.profilePic, message: data.message, timestamp: data.timestamp });
       }
       ensureChatInList(other);
