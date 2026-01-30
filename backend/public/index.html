@@ -1,275 +1,218 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-  <title>Avezzano Plus</title>
-  <style>
-    html, body { height:100%; margin:0; padding:0; font-family:sans-serif; background:#f9f9f9; overflow-x:hidden; }
-    header { background:#007bff; color:#fff; padding:1rem; text-align:center; flex-shrink:0; position:relative; }
-    #app { display:flex; height:calc(100% - 64px); overflow:hidden; }
-    #sidebar { background:#fff; border-right:1px solid #ccc; width:220px; flex-shrink:0; overflow-y:auto; }
-    #sidebar h3 { margin:0; padding:0.75rem; background:#eef5ff; border-bottom:1px solid #ccc; }
-    #chat-list { list-style:none; margin:0; padding:0; }
-    #chat-list li { padding:0.75rem; border-bottom:1px solid #eee; cursor:pointer; }
-    #chat-list li.active { background:#dbe8ff; font-weight:bold; }
-    #main { flex:1; display:flex; flex-direction:column; min-width:0; }
-    #chat-window { flex:1; overflow-y:auto; padding:1rem; background:#fff; }
-    .msg { display:flex; align-items:center; margin-bottom:6px; word-wrap:break-word; }
-    .msg img { width:32px; height:32px; border-radius:50%; margin-right:8px; object-fit:cover; }
-    .msg .bubble { background:#f4f6fb; padding:8px 10px; border-radius:8px; max-width:80%; word-wrap:break-word; }
-    .msg.me .bubble { background:#dbe8ff; }
-    #input-bar { display:flex; border-top:1px solid #ccc; background:#f1f1f1; padding:0.5rem; }
-    #input-bar input { flex:1; padding:0.5rem; border:1px solid #ccc; border-radius:4px; font-size:1rem; }
-    #input-bar button { margin-left:0.5rem; padding:0.5rem 1rem; border:none; background:#007bff; color:#fff; border-radius:4px; font-size:1rem; cursor:pointer; }
-    #online-list { border-top:1px solid #ccc; max-height:150px; overflow-y:auto; background:#fafafa; }
-    .user { display:flex; align-items:center; padding:0.5rem; border-bottom:1px solid #eee; cursor:pointer; }
-    .user img { width:28px; height:28px; border-radius:50%; margin-right:8px; object-fit:cover; }
-    #status { position:absolute; right:12px; top:12px; color:#fff; font-size:0.85rem; opacity:0.95; }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Avezzano Plus</title>
 
-    @media (max-width:768px){
-      #sidebar { position:absolute; left:-240px; top:64px; bottom:0; width:220px; transition:left 0.3s; z-index:1000; }
-      #sidebar.show { left:0; }
-      #toggle-sidebar { position:absolute; left:10px; top:10px; background:#fff; border:1px solid #ccc; padding:0.25rem 0.5rem; cursor:pointer; border-radius:4px; }
-    }
-  </style>
+<style>
+html,body{height:100%;margin:0;font-family:sans-serif;background:#f9f9f9;overflow:hidden}
+header{background:#007bff;color:#fff;padding:1rem;text-align:center;position:relative}
+#status{position:absolute;right:12px;top:12px;font-size:.85rem}
+
+#app{display:flex;height:calc(100% - 64px)}
+#sidebar{width:220px;background:#fff;border-right:1px solid #ccc;overflow-y:auto}
+#sidebar h3{margin:0;padding:.75rem;background:#eef5ff;border-bottom:1px solid #ccc}
+#chat-list{list-style:none;margin:0;padding:0}
+#chat-list li{padding:.75rem;border-bottom:1px solid #eee;cursor:pointer}
+#chat-list li.active{background:#dbe8ff;font-weight:bold}
+
+#main{flex:1;display:flex;flex-direction:column;min-width:0}
+#chat-window{flex:1;padding:1rem;overflow-y:auto;background:#fff}
+
+.msg{display:flex;align-items:flex-start;margin-bottom:6px}
+.msg img{width:32px;height:32px;border-radius:50%;margin-right:8px;object-fit:cover}
+.bubble{background:#f4f6fb;padding:8px 10px;border-radius:8px;max-width:80%}
+.msg.me .bubble{background:#dbe8ff}
+
+#input-bar{display:flex;border-top:1px solid #ccc;background:#f1f1f1;padding:.5rem}
+#input-bar input{flex:1;padding:.5rem;font-size:1rem}
+#input-bar button{margin-left:.5rem;padding:.5rem 1rem;border:none;background:#007bff;color:#fff;border-radius:4px}
+
+#online-list{border-top:1px solid #ccc;background:#fafafa}
+.user{display:flex;align-items:center;padding:.5rem;border-bottom:1px solid #eee;cursor:pointer}
+.user img{width:28px;height:28px;border-radius:50%;margin-right:8px}
+
+@media(max-width:768px){
+#sidebar{position:absolute;left:-240px;top:64px;bottom:0;transition:.3s;z-index:1000}
+#sidebar.show{left:0}
+#toggle{position:absolute;left:10px;top:10px}
+}
+</style>
 </head>
+
 <body>
-  <header>
-    Avezzano Plus
-    <button id="toggle-sidebar" style="display:none;">☰</button>
-    <div id="status">Connessione: <span id="conn-state">—</span></div>
-  </header>
 
-  <div id="app">
-    <div id="sidebar">
-      <h3>Chat</h3>
-      <ul id="chat-list"><li class="active" data-chat="public">Chat Pubblica</li></ul>
-      <h3>Utenti online</h3>
-      <div id="online-list"></div>
-    </div>
+<header>
+Avezzano Plus
+<button id="toggle" style="display:none">☰</button>
+<div id="status">Connessione: <span id="conn">—</span></div>
+</header>
 
-    <div id="main">
-      <div id="chat-window" aria-live="polite"></div>
-      <div id="input-bar">
-        <input id="msg" placeholder="Scrivi un messaggio..." maxlength="240" autocomplete="off">
-        <button id="sendBtn">Invia</button>
-      </div>
-    </div>
-  </div>
+<div id="app">
+<div id="sidebar">
+<h3>Chat</h3>
+<ul id="chat-list">
+<li class="active" data-chat="public">Chat Pubblica</li>
+</ul>
+<h3>Utenti online</h3>
+<div id="online-list"></div>
+</div>
+
+<div id="main">
+<div id="chat-window"></div>
+<div id="input-bar">
+<input id="msg" placeholder="Scrivi un messaggio…" maxlength="240">
+<button id="send">Invia</button>
+</div>
+</div>
+</div>
 
 <script>
-const chatWindow = document.getElementById('chat-window');
-const sendBtn = document.getElementById('sendBtn');
-const msgInput = document.getElementById('msg');
-const chatList = document.getElementById('chat-list');
-const onlineList = document.getElementById('online-list');
-const sidebar = document.getElementById('sidebar');
-const toggleSidebarBtn = document.getElementById('toggle-sidebar');
-const connState = document.getElementById('conn-state');
+/* ===== VARIABILI ===== */
+let socket;
+let userData = JSON.parse(localStorage.getItem('userData')||'null');
+let openedChats = JSON.parse(localStorage.getItem('openedChats')||'[]');
+let activeChat='public';
+let chats={public:[]};
 
-let socket = null;
-let socketReady = false;
-let pendingQueue = [];
-let userData = JSON.parse(localStorage.getItem('userData') || 'null');
-let openedChats = JSON.parse(localStorage.getItem('openedChats') || '[]');
-let activeChat = 'public';
-let chats = {};
-chats.public = chats.public || [];
+const chatWindow=document.getElementById('chat-window');
+const chatList=document.getElementById('chat-list');
+const onlineList=document.getElementById('online-list');
+const msgInput=document.getElementById('msg');
+const sendBtn=document.getElementById('send');
+const conn=document.getElementById('conn');
+const sidebar=document.getElementById('sidebar');
+const toggle=document.getElementById('toggle');
 
-function setConnState(s) { connState.textContent = s; }
-
-function renderChat() {
-  chatWindow.innerHTML = '';
-  const list = chats[activeChat] || [];
-  for (const m of list) {
-    const div = document.createElement('div');
-    div.className = 'msg' + ((m.user === userData?.name) ? ' me' : '');
-    const img = document.createElement('img');
-    img.src = m.profilePic || '';
-    const bubble = document.createElement('div');
-    bubble.className = 'bubble';
-    bubble.textContent = (m.user ? m.user + ': ' : '') + m.message;
-    div.appendChild(img);
-    div.appendChild(bubble);
-    chatWindow.appendChild(div);
+/* ===== REGISTRAZIONE BASE ===== */
+if(!userData){
+  const name=prompt('Inserisci il tuo nome');
+  if(!name){alert('Accesso annullato');}
+  else{
+    userData={name:name.trim(),profilePic:''};
+    localStorage.setItem('userData',JSON.stringify(userData));
   }
-  chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-function saveOpenedChats() { localStorage.setItem('openedChats', JSON.stringify(openedChats)); }
+/* ===== BLOCCA CHAT CON SE STESSO ===== */
+openedChats=openedChats.filter(n=>n!==userData.name);
+localStorage.setItem('openedChats',JSON.stringify(openedChats));
 
-function ensureChatInList(name) {
-  if (!chatList.querySelector(`[data-chat="${CSS.escape(name)}"]`)) {
-    const li = document.createElement('li');
-    li.textContent = name;
-    li.dataset.chat = name;
-    li.addEventListener('click', () => setActiveChat(name));
+/* ===== RENDER ===== */
+function render(){
+  chatWindow.innerHTML='';
+  (chats[activeChat]||[]).forEach(m=>{
+    const div=document.createElement('div');
+    div.className='msg'+(m.user===userData.name?' me':'');
+    div.innerHTML=`<img src="${m.profilePic||''}">
+    <div class="bubble">${m.user?m.user+': ':''}${m.message}</div>`;
+    chatWindow.appendChild(div);
+  });
+  chatWindow.scrollTop=chatWindow.scrollHeight;
+}
+
+/* ===== CHAT LIST ===== */
+function setActive(name){
+  activeChat=name;
+  [...chatList.children].forEach(li=>li.classList.toggle('active',li.dataset.chat===name));
+  render();
+}
+
+function ensureChat(name){
+  if(!chatList.querySelector(`[data-chat="${CSS.escape(name)}"]`)){
+    const li=document.createElement('li');
+    li.textContent=name;
+    li.dataset.chat=name;
+    li.onclick=()=>setActive(name);
     chatList.appendChild(li);
   }
 }
 
-function setActiveChat(name) {
-  activeChat = name;
-  [...chatList.children].forEach(li => li.classList.toggle('active', li.dataset.chat === name));
-  renderChat();
+/* ===== INVIO ===== */
+function send(){
+  const text=msgInput.value.trim();
+  if(!text)return;
+  socket.send(JSON.stringify(
+    activeChat==='public'
+    ?{type:'chat',message:text}
+    :{type:'private',to:activeChat,message:text}
+  ));
+  msgInput.value='';
 }
+sendBtn.onclick=send;
+msgInput.onkeydown=e=>e.key==='Enter'&&send();
 
-function queueOrSend(obj) {
-  if (socketReady && socket && socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify(obj));
-  } else {
-    pendingQueue.push(obj);
-  }
-}
+/* ===== SOCKET ===== */
+function start(){
+  const proto=location.protocol==='https:'?'wss://':'ws://';
+  socket=new WebSocket(proto+location.host);
+  conn.textContent='connessione…';
 
-function flushQueue() {
-  while (pendingQueue.length) {
-    const obj = pendingQueue.shift();
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(obj));
-    } else {
-      pendingQueue.unshift(obj);
-      break;
-    }
-  }
-}
+  socket.onopen=()=>{
+    conn.textContent='connesso';
+    socket.send(JSON.stringify({type:'join',name:userData.name,profilePic:userData.profilePic}));
+    openedChats.forEach(c=>{ensureChat(c);socket.send(JSON.stringify({type:'loadPrivateChat',with:c}))});
+  };
 
-function sendMessage() {
-  const text = (msgInput.value || '').trim();
-  if (!text) return;
-  if (!userData) { alert('Devi registrarti prima'); return; }
+  socket.onmessage=e=>{
+    const d=JSON.parse(e.data);
 
-  if (activeChat === 'public') {
-    queueOrSend({ type: 'chat', message: text });
-  } else {
-    queueOrSend({ type: 'private', to: activeChat, message: text });
-  }
-
-  msgInput.value = '';
-}
-
-function openPrivateChat(name, pic) {
-  if (!userData) { alert('Devi registrarti prima'); return; }
-  if (name === userData.name) return;
-  if (!openedChats.includes(name)) {
-    openedChats.push(name);
-    saveOpenedChats();
-  }
-  ensureChatInList(name);
-  setActiveChat(name);
-  chats[name] = chats[name] || [];
-  renderChat();
-  queueOrSend({ type: 'loadPrivateChat', with: name });
-}
-
-function startChat() {
-  const proto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-  socket = new WebSocket(proto + window.location.host);
-
-  setConnState('connessione in corso...');
-  socketReady = false;
-
-  socket.addEventListener('open', () => {
-    socketReady = true;
-    setConnState('connesso');
-    socket.send(JSON.stringify({ type: 'join', name: userData.name, profilePic: userData.profilePic }));
-    flushQueue();
-    for (const name of openedChats) {
-      ensureChatInList(name);
-      queueOrSend({ type: 'loadPrivateChat', with: name });
-    }
-  });
-
-  socket.addEventListener('close', () => {
-    socketReady = false;
-    setConnState('disconnesso — riconnessione in corso');
-    setTimeout(() => { try { startChat(); } catch(e) {} }, 1500);
-  });
-
-  socket.addEventListener('error', () => {
-    socketReady = false;
-    setConnState('errore connessione');
-  });
-
-  socket.addEventListener('message', ev => {
-    let data;
-    try { data = JSON.parse(ev.data); } catch (e) { return; }
-
-    if (data.type === 'chat') {
-      chats.public = chats.public || [];
-      chats.public.push({ user: data.user, profilePic: data.profilePic, message: data.message, timestamp: data.timestamp });
-      if (activeChat === 'public') renderChat();
+    if(d.type==='chat'){
+      chats.public.push(d);
+      if(activeChat==='public')render();
     }
 
-    else if (data.type === 'chatHistory') {
-      const chatId = data.chat === 'public' ? 'public' : data.chat;
-      chats[chatId] = (data.messages || []).map(m => ({
-        user: m.user || m.from,
-        profilePic: m.profilePic,
-        message: m.message,
-        timestamp: m.timestamp
+    if(d.type==='chatHistory'){
+      chats[d.chat]=d.messages.map(m=>({
+        user:m.user||m.from,
+        message:m.message,
+        profilePic:m.profilePic
       }));
-      if (chatId !== 'public' && !openedChats.includes(chatId)) {
-        openedChats.push(chatId); saveOpenedChats(); ensureChatInList(chatId);
-      }
-      if (activeChat === chatId) renderChat();
+      ensureChat(d.chat);
+      if(activeChat===d.chat)render();
     }
 
-    else if (data.type === 'online') {
-      // ✅ Corretto: svuota prima la lista per evitare duplicazioni
-      onlineList.innerHTML = '';
-      const unique = new Map();
-      (data.users || []).forEach(u => {
-        if (u.name === userData.name) return;
-        if (!unique.has(u.name)) {
-          const row = document.createElement('div');
-          row.className = 'user';
-          row.innerHTML = `<img src="${u.profilePic || ''}"><span>${u.name}</span>`;
-          row.addEventListener('click', () => openPrivateChat(u.name, u.profilePic));
-          onlineList.appendChild(row);
-          unique.set(u.name, true);
-        }
+    if(d.type==='private'){
+      const other=d.from===userData.name?d.to:d.from;
+      if(other===userData.name)return;
+      chats[other]=chats[other]||[];
+      if(!chats[other].some(m=>m.timestamp===d.timestamp))
+        chats[other].push({user:d.from,message:d.message,profilePic:d.profilePic});
+      ensureChat(other);
+      if(activeChat===other)render();
+    }
+
+    if(d.type==='online'){
+      onlineList.innerHTML='';
+      d.users.forEach(u=>{
+        if(u.name===userData.name)return;
+        const row=document.createElement('div');
+        row.className='user';
+        row.innerHTML=`<img src="${u.profilePic||''}"><span>${u.name}</span>`;
+        row.onclick=()=>{
+          if(!openedChats.includes(u.name)){
+            openedChats.push(u.name);
+            localStorage.setItem('openedChats',JSON.stringify(openedChats));
+          }
+          ensureChat(u.name);
+          setActive(u.name);
+          socket.send(JSON.stringify({type:'loadPrivateChat',with:u.name}));
+        };
+        onlineList.appendChild(row);
       });
     }
-
-    else if (data.type === 'private') {
-      const from = data.from;
-      const to = data.to;
-      const other = (from === userData.name) ? to : from;
-      if (!other) return;
-      chats[other] = chats[other] || [];
-      // ✅ Evita duplicati: se già esiste stesso messaggio+timestamp, non aggiungere
-      if (!chats[other].some(m => m.timestamp === data.timestamp && m.message === data.message && m.user === data.from)) {
-        chats[other].push({ user: data.from, profilePic: data.profilePic, message: data.message, timestamp: data.timestamp });
-      }
-      ensureChatInList(other);
-      if (activeChat === other) renderChat();
-    }
-  });
+  };
 }
 
-sendBtn.addEventListener('click', sendMessage);
-msgInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
+chatList.querySelector('[data-chat="public"]').onclick=()=>setActive('public');
 
-if (window.innerWidth <= 768) {
-  toggleSidebarBtn.style.display = 'inline-block';
-  toggleSidebarBtn.addEventListener('click', () => sidebar.classList.toggle('show'));
+if(window.innerWidth<=768){
+  toggle.style.display='block';
+  toggle.onclick=()=>sidebar.classList.toggle('show');
 }
 
-for (const name of openedChats) ensureChatInList(name);
-
-chatList.querySelector('[data-chat="public"]').addEventListener('click', () => setActiveChat('public'));
-
-if (!userData) {
-  alert('Prima completa la registrazione!');
-} else {
-  userData.name = userData.name || 'Utente';
-  userData.profilePic = userData.profilePic || '';
-  chats.public = chats.public || [];
-  startChat();
-  setActiveChat('public');
-}
+start();
 </script>
 </body>
 </html>
